@@ -1,6 +1,6 @@
 # Topog — Dünya Fiziksel Haritası & Canlı Atmosfer Atlası
 
-**Aktif Sürüm:** `T 1.2` · **Sürüm Geçmişi:** [CHANGELOG.md](./CHANGELOG.md)
+**Aktif Sürüm:** `T 1.3` · **Sürüm Geçmişi:** [CHANGELOG.md](./CHANGELOG.md)
 
 Topog; tamamen ücretsiz, API anahtarı gerektirmeyen açık coğrafi ve meteorolojik veri kaynaklarıyla çalışan etkileşimli 2B/3B dünya fiziksel harita, canlı hava durumu, yağmur radarı ve uydu bulut örtüsü uygulamasıdır.
 
@@ -24,17 +24,18 @@ Topog; tamamen ücretsiz, API anahtarı gerektirmeyen açık coğrafi ve meteoro
 
 ### Bölgeye Duyarlı Canlı Hava Durumu & 15 Dakikalık Önbellek
 - **Küresel + Türkiye Kapsamı:** 4.964 küresel şehir/başkent ve 83 Türkiye yerleşimi ([`src/data/worldCities.json`](./src/data/worldCities.json)); `z10+` yakınlaştırmada ise merkezdeki ilçe/kasaba otomatik keşfedilir.
+- **Dağlar & Zirveler Katmanı:** 113 küresel zirve ve 34 Türkiye dağı ([`src/data/worldPeaks.json`](./src/data/worldPeaks.json)); `z5.0+` seviyesinde dağ adı, rakım ve Open-Meteo `elevation` parametreli gerçek zirve sıcaklığı, `z9.5+` seviyesinde OpenStreetMap Overpass ilave zirve keşfi ve altın üçgenli zirve rozetleri.
 - **15 Dakikalık Kalıcı Önbellek (RAM + `localStorage`):** Aynı bölgeye 15 dakika içinde dönüldüğünde API isteği atılmadan bellekten gösterilir; 15 dakika dolduğunda otomatik olarak güncel veri çekilir.
 - **Canlı Animasyonlu SVG İkonlar & Tam Konum Sabitleme:** Güneş, ay/yıldız, sürüklenen bulut, yağmur damlaları, kar taneleri, sis ve şimşek animasyonları haritada tam şehir koordinatına sabitlenir.
-- **Arka Plan Şeffaflık Kontrolü (`%0 – %100`):** Yalnızca etiketin koyu arka planını saydamlaştırır; şehir adı, sıcaklık ve ikon her zaman `%100` net kalır.
-- **Detaylı Hava Durumu Kartı:** Sıcaklık, hissedilen sıcaklık, nem, rüzgar, basınç, önbellekte kalan geçerlilik süresi ve **Şimdi Yenile** düğmesi.
+- **Arka Plan Şeffaflık Kontrolü (`%0 – %100`):** Yalnızca etiketin koyu arka planını saydamlaştırır; şehir/zirve adı, sıcaklık ve ikon her zaman `%100` net kalır.
+- **Detaylı Hava Durumu Kartı:** Sıcaklık, hissedilen sıcaklık, nem, rüzgar, basınç, zirve rakımı etiketi, önbellekte kalan geçerlilik süresi ve **Şimdi Yenile** düğmesi.
 
 ### Atmosfer Katmanları
 - **Yağmur Radarı (RainViewer):** Canlı yağış radarı, `%20 – %100` şeffaflık ayarı ve son 2 saat için **Oynat / Duraklat** animasyon çubuğu.
 - **Canlı Bulut Örtüsü (Uydu IR):** SSEC RealEarth küresel jeostasyoner uydu IR bulut katmanı (`z8`'e kadar yüksek çözünürlük, özel `cloud-ir://` şeffaf bulut protokolü) ve `%20 – %100` şeffaflık ayarı.
 
 ### Sürüm Takibi
-- Uygulama içi sol üstteki **`T 1.2`** rozetine tıklayarak tüm sürüm notlarını (*Eklenenler / Yapılanlar / Çıkarılanlar*) görüntüleyebilirsiniz.
+- Uygulama içi sol üstteki **`T 1.3`** rozetine tıklayarak tüm sürüm notlarını (*Eklenenler / Yapılanlar / Çıkarılanlar*) görüntüleyebilirsiniz.
 
 ---
 

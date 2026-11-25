@@ -1389,3 +1389,87 @@ body,
   line-height: 1.45;
   color: var(--text-secondary);
 }
+
+/* Mountain Peak Badges */
+.peak-marker-pin {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-amber);
+  border: 1.5px solid #ffffff;
+  box-shadow: 0 0 6px rgba(251, 191, 36, 0.85);
+  margin-top: 3px;
+  pointer-events: none;
+}
+
+.peak-badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px 3px 8px;
+  border-radius: 999px;
+  background: rgba(15, 21, 32, var(--weather-badge-opacity, 0.92));
+  backdrop-filter: blur(calc(var(--weather-badge-opacity, 0.92) * 12px));
+  -webkit-backdrop-filter: blur(calc(var(--weather-badge-opacity, 0.92) * 12px));
+  border: 1px solid rgba(251, 191, 36, calc(var(--weather-badge-opacity, 0.92) * 0.42));
+  box-shadow: 0 6px 18px rgba(2, 6, 23, calc(var(--weather-badge-opacity, 0.92) * 0.52));
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.peak-badge:hover {
+  transform: translateY(-2px) scale(1.03);
+  border-color: rgba(251, 191, 36, 0.85);
+  z-index: 6;
+}
+
+.peak-badge.selected {
+  border-color: var(--accent-amber);
+  background: rgba(34, 26, 14, 0.94);
+  box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.28), 0 8px 20px rgba(2, 6, 23, 0.6);
+}
+
+.peak-badge-tri {
+  color: var(--accent-amber);
+  font-size: 10px;
+  line-height: 1;
+  text-shadow: 0 1px 3px rgba(2, 6, 23, 0.92);
+}
+
+.peak-badge-name {
+  max-width: 118px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 3px rgba(2, 6, 23, 0.92), 0 0 8px rgba(2, 6, 23, 0.65);
+}
+
+.peak-badge-ele {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: #fde68a;
+  font-weight: 600;
+  text-shadow: 0 1px 3px rgba(2, 6, 23, 0.92), 0 0 8px rgba(2, 6, 23, 0.65);
+}
+
+.peak-badge-temp {
+  font-family: var(--font-mono);
+  color: var(--accent);
+  font-weight: 600;
+  text-shadow: 0 1px 3px rgba(2, 6, 23, 0.92), 0 0 8px rgba(2, 6, 23, 0.65);
+}
+
+.peak-country-tag {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(251, 191, 36, 0.16);
+  color: #fde68a;
+}

@@ -7,6 +7,7 @@ import { WeatherIcon } from './WeatherIcon';
 
 interface WeatherDetailCardProps {
   weather: WeatherData;
+  elevationMeters?: number;
   refreshing: boolean;
   onRefresh: (weather: WeatherData) => void;
   onClose: () => void;
@@ -14,6 +15,7 @@ interface WeatherDetailCardProps {
 
 export function WeatherDetailCard({
   weather,
+  elevationMeters,
   refreshing,
   onRefresh,
   onClose,
@@ -49,6 +51,11 @@ export function WeatherDetailCard({
         <div className="weather-city-block">
           <div className="weather-city-title">
             {weather.cityName}
+            {typeof elevationMeters === 'number' && (
+              <span className="peak-country-tag">
+                ▲ {elevationMeters.toLocaleString('tr-TR')} m
+              </span>
+            )}
             {weather.country ? (
               <span className="weather-country-tag">{weather.country}</span>
             ) : null}

@@ -7,6 +7,25 @@ Sürüm numaralandırma kuralı: **`T <Büyük>.<Küçük>`**
 
 ---
 
+## [T 1.3] — 2026-11-25
+**Dağlar & Zirveler Katmanı ve Gerçek Zirve Sıcaklığı**
+
+### Eklenenler
+- 113 küresel zirve ve 34 Türkiye dağı içeren veri seti (`src/data/worldPeaks.json`) eklendi.
+- `z5.0+` seviyesinde dağların adı, rakımı ve Open-Meteo `elevation` parametreli gerçek zirve sıcaklığı servisi (`src/services/peakService.ts`) eklendi.
+- `z9.5+` seviyesinde OpenStreetMap Overpass API üzerinden ilave zirve keşfi eklendi.
+- Şehirlerle aynı 15 dakikalık RAM + `localStorage` önbellek kuralı zirve verileri için uygulandı.
+- Harita üzerinde altın üçgenli zirve rozetleri (`MapCanvas.tsx`), detay kartında zirve rakımı etiketi (`WeatherDetailCard.tsx`) ve katman panelinde `Dağlar & Zirveler` anahtarı (`LayerPanel.tsx`) eklendi.
+
+### Yapılanlar / İyileştirmeler
+- Gerçek zirve sıcaklığı alınamayan durumlarda uydurma veya tahmini sıcaklık gösterilmez; yalnızca dağ adı ve rakımı gösterilir.
+- Etiket arka plan şeffaflığı (`%0–%100`) dağ etiketlerinde de geçerli hale getirildi.
+
+### Çıkarılanlar
+- Bu sürümde kaldırılan bir özellik yoktur.
+
+---
+
 ## [T 1.2] — 2026-11-25
 **Canlı Küresel Jeostasyoner Uydu IR Bulut Katmanı**
 

@@ -48,3 +48,18 @@ export interface RadarFrame {
   tileUrl: string;
 }
 
+export interface PeakRecord {
+  id: string;
+  name: string;
+  country: string;
+  lat: number;
+  lng: number;
+  elevation: number;
+}
+
+export interface PeakDisplayItem {
+  peak: PeakRecord;
+  weather: WeatherData | null;
+}
+
+

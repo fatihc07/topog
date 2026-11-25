@@ -14,6 +14,14 @@ import {
   hasCityNearPoint,
 } from './services/cityIndex';
 import { fetchElevation, reverseGeocode } from './services/geocoding';
+import {
+  PEAKS_MIN_ZOOM,
+  fetchOverpassPeaks,
+  fetchPeakWeatherBatch,
+  getPeakCacheId,
+  getVisibleLocalPeaks,
+  selectNonOverlappingPeaks,
+} from './services/peakService';
 import { fetchRainViewerFrames } from './services/radarService';
 import {
   clearWeatherCache,
@@ -34,6 +42,7 @@ import type {
 } from './types/map';
 import type {
   CityRecord,
+  PeakDisplayItem,
   RadarFrame,
   ViewportBounds,
   WeatherData,
@@ -44,6 +53,7 @@ export default function App() {
   const mapHandleRef = useRef<MapCanvasHandle | null>(null);
   const inspectAbortRef = useRef<AbortController | null>(null);
   const weatherAbortRef = useRef<AbortController | null>(null);
+  const peaksAbortRef = useRef<AbortController | null>(null);
   const weatherTimerRef = useRef<number | null>(null);
   const lastBoundsRef = useRef<ViewportBounds | null>(null);
 
@@ -67,6 +77,11 @@ export default function App() {
   const [weatherBadgeOpacity, setWeatherBadgeOpacity] = useState(0.92);
   const [weatherItems, setWeatherItems] = useState<WeatherData[]>([]);
   const [selectedWeather, setSelectedWeather] = useState<WeatherData | null>(
+    null
+  );
+  const [peaksEnabled, setPeaksEnabled] = useState(true);
+  const [peakItems, setPeakItems] = useState<PeakDisplayItem[]>([]);
+  const [selectedPeak, setSelectedPeak] = useState<PeakDisplayItem | null>(
     null
   );
   const [refreshingCity, setRefreshingCity] = useState(false);
@@ -216,6 +231,65 @@ export default function App() {
     []
   );
 
+  const syncPeaksForBounds = useCallback(
+    async (bounds: ViewportBounds, enabled: boolean) => {
+      peaksAbortRef.current?.abort();
+
+      if (!enabled || bounds.zoom < PEAKS_MIN_ZOOM) {
+        setPeakItems([]);
+        return;
+      }
+
+      const controller = new AbortController();
+      peaksAbortRef.current = controller;
+
+      try {
+        const localPeaks = getVisibleLocalPeaks(bounds);
+        const initialSelected = selectNonOverlappingPeaks(
+          localPeaks,
+          bounds.zoom,
+          8
+        );
+
+        // Show known mountains immediately with real cached/fetched summit temperature
+        if (initialSelected.length > 0) {
+          const initialBatch = await fetchPeakWeatherBatch(initialSelected, {
+            signal: controller.signal,
+          });
+          if (controller.signal.aborted) return;
+          setPeakItems(initialBatch.items);
+          setWeatherCacheCount(getWeatherCacheCount());
+        } else {
+          setPeakItems([]);
+        }
+
+        // At high zoom (z9.5+), also discover additional OSM peaks in the region
+        const osmPeaks = await fetchOverpassPeaks(bounds, controller.signal);
+        if (controller.signal.aborted || osmPeaks.length === 0) return;
+
+        const merged = selectNonOverlappingPeaks(
+          [...localPeaks, ...osmPeaks],
+          bounds.zoom,
+          8
+        );
+        const fullBatch = await fetchPeakWeatherBatch(merged, {
+          signal: controller.signal,
+        });
+        if (controller.signal.aborted) return;
+
+        setPeakItems(fullBatch.items);
+        setWeatherCacheCount(getWeatherCacheCount());
+        setSelectedPeak((prev) => {
+          if (!prev) return null;
+          return fullBatch.items.find((p) => p.peak.id === prev.peak.id) ?? prev;
+        });
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') return;
+      }
+    },
+    []
+  );
+
   const handleViewportChange = useCallback(
     (bounds: ViewportBounds) => {
       lastBoundsRef.current = bounds;
@@ -224,9 +298,10 @@ export default function App() {
       }
       weatherTimerRef.current = window.setTimeout(() => {
         void syncWeatherForBounds(bounds, weatherEnabled);
+        void syncPeaksForBounds(bounds, peaksEnabled);
       }, 250);
     },
-    [syncWeatherForBounds, weatherEnabled]
+    [syncWeatherForBounds, syncPeaksForBounds, weatherEnabled, peaksEnabled]
   );
 
   useEffect(() => {
@@ -239,11 +314,21 @@ export default function App() {
   }, [weatherEnabled, syncWeatherForBounds]);
 
   useEffect(() => {
+    if (lastBoundsRef.current) {
+      void syncPeaksForBounds(lastBoundsRef.current, peaksEnabled);
+    }
+    if (!peaksEnabled) {
+      setSelectedPeak(null);
+    }
+  }, [peaksEnabled, syncPeaksForBounds]);
+
+  useEffect(() => {
     return () => {
       if (weatherTimerRef.current !== null) {
         window.clearTimeout(weatherTimerRef.current);
       }
       weatherAbortRef.current?.abort();
+      peaksAbortRef.current?.abort();
       inspectAbortRef.current?.abort();
     };
   }, []);
@@ -251,6 +336,7 @@ export default function App() {
   const handleInspectPoint = useCallback(
     async (lng: number, lat: number, presetPlaceName?: string) => {
       setSelectedWeather(null);
+      setSelectedPeak(null);
       inspectAbortRef.current?.abort();
       const controller = new AbortController();
       inspectAbortRef.current = controller;
@@ -296,46 +382,91 @@ export default function App() {
   const handleSelectWeather = useCallback((item: WeatherData) => {
     inspectAbortRef.current?.abort();
     setInspectedPoint(null);
+    setSelectedPeak(null);
     setSelectedWeather(item);
   }, []);
 
-  const handleRefreshCityWeather = useCallback(async (target: WeatherData) => {
-    setRefreshingCity(true);
-    try {
-      invalidateCityWeather(target.cityId);
-      const city: CityRecord = {
-        id: target.cityId,
-        name: target.cityName,
-        country: target.country,
-        lat: target.lat,
-        lng: target.lng,
-        pop: 1,
-      };
-      const result = await fetchWeatherForCities([city], {
-        forceRefresh: true,
+  const handleSelectPeak = useCallback((item: PeakDisplayItem) => {
+    inspectAbortRef.current?.abort();
+    setSelectedWeather(null);
+    if (item.weather) {
+      setInspectedPoint(null);
+      setSelectedPeak(item);
+    } else {
+      setSelectedPeak(null);
+      setInspectedPoint({
+        lng: item.peak.lng,
+        lat: item.peak.lat,
+        elevation: item.peak.elevation,
+        placeName: `${item.peak.name} (Zirve)`,
+        loading: false,
       });
-      const updated = result.items[0];
-      if (updated) {
-        setSelectedWeather(updated);
-        setWeatherItems((prev) =>
-          prev.map((w) => (w.cityId === updated.cityId ? updated : w))
-        );
-        setWeatherCacheCount(getWeatherCacheCount());
-      }
-    } catch {
-      // Keep existing weather item on transient error
-    } finally {
-      setRefreshingCity(false);
     }
   }, []);
+
+  const handleRefreshCityWeather = useCallback(
+    async (target: WeatherData) => {
+      setRefreshingCity(true);
+      try {
+        invalidateCityWeather(target.cityId);
+
+        if (selectedPeak && getPeakCacheId(selectedPeak.peak.id) === target.cityId) {
+          const batch = await fetchPeakWeatherBatch([selectedPeak.peak], {
+            forceRefresh: true,
+          });
+          const updatedItem = batch.items[0];
+          if (updatedItem) {
+            setSelectedPeak(updatedItem);
+            setPeakItems((prev) =>
+              prev.map((p) =>
+                p.peak.id === updatedItem.peak.id ? updatedItem : p
+              )
+            );
+            setWeatherCacheCount(getWeatherCacheCount());
+          }
+          return;
+        }
+
+        const city: CityRecord = {
+          id: target.cityId,
+          name: target.cityName,
+          country: target.country,
+          lat: target.lat,
+          lng: target.lng,
+          pop: 1,
+        };
+        const result = await fetchWeatherForCities([city], {
+          forceRefresh: true,
+        });
+        const updated = result.items[0];
+        if (updated) {
+          setSelectedWeather(updated);
+          setWeatherItems((prev) =>
+            prev.map((w) => (w.cityId === updated.cityId ? updated : w))
+          );
+          setWeatherCacheCount(getWeatherCacheCount());
+        }
+      } catch {
+        // Keep existing weather item on transient error
+      } finally {
+        setRefreshingCity(false);
+      }
+    },
+    [selectedPeak]
+  );
 
   const handleClearWeatherCache = useCallback(() => {
     clearWeatherCache();
     setWeatherCacheCount(0);
-    if (lastBoundsRef.current && weatherEnabled) {
-      void syncWeatherForBounds(lastBoundsRef.current, true);
+    if (lastBoundsRef.current) {
+      if (weatherEnabled) {
+        void syncWeatherForBounds(lastBoundsRef.current, true);
+      }
+      if (peaksEnabled) {
+        void syncPeaksForBounds(lastBoundsRef.current, true);
+      }
     }
-  }, [syncWeatherForBounds, weatherEnabled]);
+  }, [syncWeatherForBounds, syncPeaksForBounds, weatherEnabled, peaksEnabled]);
 
   const handleSelectLandmark = useCallback(
     (landmark: LandmarkPreset) => {
@@ -421,10 +552,13 @@ export default function App() {
         weatherItems={weatherItems}
         weatherBadgeOpacity={weatherBadgeOpacity}
         selectedWeatherCityId={selectedWeather?.cityId ?? null}
+        peakItems={peakItems}
+        selectedPeakId={selectedPeak?.peak.id ?? null}
         onTelemetryChange={setTelemetry}
         onInspectPoint={(lng, lat) => void handleInspectPoint(lng, lat)}
         onViewportChange={handleViewportChange}
         onSelectWeather={handleSelectWeather}
+        onSelectPeak={handleSelectPeak}
       />
 
       <SearchBar
@@ -442,6 +576,7 @@ export default function App() {
         weatherEnabled={weatherEnabled}
         weatherBadgeOpacity={weatherBadgeOpacity}
         weatherCacheCount={weatherCacheCount}
+        peaksEnabled={peaksEnabled}
         rainEnabled={rainEnabled}
         rainOpacity={rainOpacity}
         rainLoading={rainLoading}
@@ -455,6 +590,7 @@ export default function App() {
         onToggleWeather={() => setWeatherEnabled((prev) => !prev)}
         onChangeWeatherBadgeOpacity={setWeatherBadgeOpacity}
         onClearWeatherCache={handleClearWeatherCache}
+        onTogglePeaks={() => setPeaksEnabled((prev) => !prev)}
         onToggleRain={() => setRainEnabled((prev) => !prev)}
         onChangeRainOpacity={setRainOpacity}
         onToggleClouds={() => setCloudsEnabled((prev) => !prev)}
@@ -482,7 +618,15 @@ export default function App() {
         />
       )}
 
-      {selectedWeather ? (
+      {selectedPeak?.weather ? (
+        <WeatherDetailCard
+          weather={selectedPeak.weather}
+          elevationMeters={selectedPeak.peak.elevation}
+          refreshing={refreshingCity}
+          onRefresh={(w) => void handleRefreshCityWeather(w)}
+          onClose={() => setSelectedPeak(null)}
+        />
+      ) : selectedWeather ? (
         <WeatherDetailCard
           weather={selectedWeather}
           refreshing={refreshingCity}

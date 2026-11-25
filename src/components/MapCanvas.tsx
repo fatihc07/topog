@@ -5,7 +5,12 @@ import { BASE_LAYERS, buildInitialStyle } from '../config/layers';
 import { registerCloudProtocol } from '../services/cloudProtocol';
 import { getWeatherMeta } from '../services/weatherService';
 import type { BaseLayerId, FlyTarget, TelemetryState } from '../types/map';
-import type { RadarFrame, ViewportBounds, WeatherData } from '../types/weather';
+import type {
+  PeakDisplayItem,
+  RadarFrame,
+  ViewportBounds,
+  WeatherData,
+} from '../types/weather';
 import { getAnimatedWeatherSvg } from './WeatherIcon';
 
 export interface MapCanvasHandle {
@@ -32,10 +37,13 @@ interface MapCanvasProps {
   weatherItems: WeatherData[];
   weatherBadgeOpacity: number;
   selectedWeatherCityId: string | null;
+  peakItems: PeakDisplayItem[];
+  selectedPeakId: string | null;
   onTelemetryChange: (telemetry: TelemetryState) => void;
   onInspectPoint: (lng: number, lat: number) => void;
   onViewportChange: (bounds: ViewportBounds) => void;
   onSelectWeather: (item: WeatherData) => void;
+  onSelectPeak: (item: PeakDisplayItem) => void;
 }
 
 export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
@@ -57,10 +65,13 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
       weatherItems,
       weatherBadgeOpacity,
       selectedWeatherCityId,
+      peakItems,
+      selectedPeakId,
       onTelemetryChange,
       onInspectPoint,
       onViewportChange,
       onSelectWeather,
+      onSelectPeak,
     },
     ref
   ) {
@@ -68,6 +79,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
     const mapRef = useRef<maplibregl.Map | null>(null);
     const markerRef = useRef<maplibregl.Marker | null>(null);
     const weatherMarkersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
+    const peakMarkersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
     const mountedRadarIdsRef = useRef<Set<string>>(new Set());
     const isLoadedRef = useRef(false);
     const terrainRef = useRef(terrain3D);
@@ -75,12 +87,14 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
     const onInspectRef = useRef(onInspectPoint);
     const onViewportRef = useRef(onViewportChange);
     const onSelectWeatherRef = useRef(onSelectWeather);
+    const onSelectPeakRef = useRef(onSelectPeak);
 
     terrainRef.current = terrain3D;
     onTelemetryRef.current = onTelemetryChange;
     onInspectRef.current = onInspectPoint;
     onViewportRef.current = onViewportChange;
     onSelectWeatherRef.current = onSelectWeather;
+    onSelectPeakRef.current = onSelectPeak;
 
     useImperativeHandle(ref, () => ({
       zoomIn: () => {
@@ -227,6 +241,10 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
           m.remove();
         }
         weatherMarkersRef.current.clear();
+        for (const m of peakMarkersRef.current.values()) {
+          m.remove();
+        }
+        peakMarkersRef.current.clear();
         mountedRadarIdsRef.current.clear();
         map.remove();
         mapRef.current = null;
@@ -505,6 +523,113 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
         }
       }
     }, [weatherItems, selectedWeatherCityId]);
+
+    // Reconcile mountain peak markers (name + elevation + real summit temp if available)
+    useEffect(() => {
+      const map = mapRef.current;
+      if (!map) return;
+
+      const markers = peakMarkersRef.current;
+      const incomingIds = new Set(peakItems.map((p) => p.peak.id));
+
+      for (const [id, existingMarker] of markers.entries()) {
+        if (!incomingIds.has(id)) {
+          existingMarker.remove();
+          markers.delete(id);
+        }
+      }
+
+      for (const item of peakItems) {
+        const { peak, weather } = item;
+        const isSelected = peak.id === selectedPeakId;
+        const existing = markers.get(peak.id);
+
+        const buildPeakContent = (btn: HTMLButtonElement) => {
+          btn.className = `peak-badge${isSelected ? ' selected' : ''}`;
+          const eleLabel = `${peak.elevation.toLocaleString('tr-TR')} m`;
+
+          if (weather) {
+            const meta = getWeatherMeta(weather.weatherCode, weather.isDay);
+            btn.title = `${peak.name} (${eleLabel}): ${Math.round(
+              weather.temperature
+            )}°C · ${meta.label} (${
+              weather.source === 'cache' ? 'Bellekten' : 'Canlı'
+            })`;
+          } else {
+            btn.title = `${peak.name} · ${eleLabel}`;
+          }
+
+          btn.innerHTML = '';
+
+          const triSpan = document.createElement('span');
+          triSpan.className = 'peak-badge-tri';
+          triSpan.textContent = '▲';
+
+          const nameSpan = document.createElement('span');
+          nameSpan.className = 'peak-badge-name';
+          nameSpan.textContent = peak.name;
+
+          const eleSpan = document.createElement('span');
+          eleSpan.className = 'peak-badge-ele';
+          eleSpan.textContent = eleLabel;
+
+          btn.append(triSpan, nameSpan, eleSpan);
+
+          // Only show temperature & weather icon when real weather data exists
+          if (weather) {
+            const iconSpan = document.createElement('span');
+            iconSpan.className = 'weather-badge-icon';
+            iconSpan.innerHTML = getAnimatedWeatherSvg(
+              weather.weatherCode,
+              weather.isDay,
+              18
+            );
+
+            const tempSpan = document.createElement('span');
+            tempSpan.className = 'peak-badge-temp';
+            tempSpan.textContent = `${Math.round(weather.temperature)}°`;
+
+            const dotSpan = document.createElement('span');
+            dotSpan.className = `cache-dot ${
+              weather.source === 'cache' ? 'cached' : 'live'
+            }`;
+
+            btn.append(iconSpan, tempSpan, dotSpan);
+          }
+
+          btn.onclick = (ev) => {
+            ev.stopPropagation();
+            onSelectPeakRef.current(item);
+          };
+        };
+
+        if (existing) {
+          existing.setLngLat([peak.lng, peak.lat]);
+          const btn = existing.getElement().firstElementChild as HTMLButtonElement | null;
+          if (btn) buildPeakContent(btn);
+        } else {
+          const wrapper = document.createElement('div');
+          wrapper.className = 'weather-marker-anchor';
+
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          buildPeakContent(btn);
+
+          const pin = document.createElement('span');
+          pin.className = 'peak-marker-pin';
+
+          wrapper.append(btn, pin);
+
+          const marker = new maplibregl.Marker({
+            element: wrapper,
+            anchor: 'bottom',
+          })
+            .setLngLat([peak.lng, peak.lat])
+            .addTo(map);
+          markers.set(peak.id, marker);
+        }
+      }
+    }, [peakItems, selectedPeakId]);
 
     return <div ref={containerRef} className="map-container" />;
   }

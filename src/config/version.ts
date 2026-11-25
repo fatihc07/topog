@@ -7,9 +7,26 @@ export interface ReleaseEntry {
   removed: string[];
 }
 
-export const APP_VERSION = 'T 1.2';
+export const APP_VERSION = 'T 1.3';
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
+  {
+    version: 'T 1.3',
+    date: '2026-11-25',
+    title: 'Dağlar & Zirveler Katmanı ve Gerçek Zirve Sıcaklığı',
+    added: [
+      '113 küresel zirve ve 34 Türkiye dağı içeren veri seti (src/data/worldPeaks.json) eklendi.',
+      'z5.0+ seviyesinde dağların adı, rakımı ve Open-Meteo elevation parametreli gerçek zirve sıcaklığı servisi (src/services/peakService.ts) eklendi.',
+      'z9.5+ yakınlaştırmada OpenStreetMap Overpass API üzerinden ilave zirve keşfi eklendi.',
+      'Şehirlerle aynı 15 dakikalık RAM + localStorage önbellek kuralı zirve hava durumu için de uygulandı.',
+      'Harita üzerinde altın üçgenli zirve rozetleri, detay kartında zirve rakımı etiketi ve katman panelinde "Dağlar & Zirveler" anahtarı eklendi.',
+    ],
+    changed: [
+      'Gerçek zirve sıcaklığı alınamayan durumlarda uydurma veya tahmini sıcaklık gösterilmez; yalnızca dağ adı ve rakımı gösterilir.',
+      'Etiket arka plan şeffaflığı (%0–%100) dağ ve zirve rozetlerinde de geçerli hale getirildi.',
+    ],
+    removed: [],
+  },
   {
     version: 'T 1.2',
     date: '2026-11-25',

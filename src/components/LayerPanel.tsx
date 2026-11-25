@@ -24,6 +24,7 @@ interface LayerPanelProps {
   weatherEnabled: boolean;
   weatherBadgeOpacity: number;
   weatherCacheCount: number;
+  peaksEnabled: boolean;
   rainEnabled: boolean;
   rainOpacity: number;
   rainLoading: boolean;
@@ -37,6 +38,7 @@ interface LayerPanelProps {
   onToggleWeather: () => void;
   onChangeWeatherBadgeOpacity: (value: number) => void;
   onClearWeatherCache: () => void;
+  onTogglePeaks: () => void;
   onToggleRain: () => void;
   onChangeRainOpacity: (value: number) => void;
   onToggleClouds: () => void;
@@ -52,6 +54,7 @@ export function LayerPanel({
   weatherEnabled,
   weatherBadgeOpacity,
   weatherCacheCount,
+  peaksEnabled,
   rainEnabled,
   rainOpacity,
   rainLoading,
@@ -65,6 +68,7 @@ export function LayerPanel({
   onToggleWeather,
   onChangeWeatherBadgeOpacity,
   onClearWeatherCache,
+  onTogglePeaks,
   onToggleRain,
   onChangeRainOpacity,
   onToggleClouds,
@@ -335,6 +339,27 @@ export function LayerPanel({
                 <span>Önbelleği Temizle ({weatherCacheCount})</span>
               </button>
             )}
+
+            <div className="toggle-row" style={{ marginTop: 4 }}>
+              <div className="toggle-label-group">
+                <Mountain size={16} color="#fbbf24" />
+                <div>
+                  <div className="toggle-label-title">Dağlar &amp; Zirveler</div>
+                  <div className="toggle-label-sub">
+                    Dağ adı, rakım ve gerçek zirve sıcaklığı · 15 dk TTL
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={peaksEnabled}
+                className={`switch-btn ${peaksEnabled ? 'on' : ''}`}
+                onClick={onTogglePeaks}
+              >
+                <span className="switch-thumb" />
+              </button>
+            </div>
           </div>
         </div>
       )}
