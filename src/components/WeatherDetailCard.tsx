@@ -2,16 +2,12 @@ import { useEffect, useState } from 'react';
 import { RefreshCw, X } from 'lucide-react';
 import { WEATHER_CACHE_TTL_MS } from '../services/weatherCache';
 import { getWeatherMeta } from '../services/weatherService';
-import type { SimHistoryPoint } from '../types/simulator';
 import type { WeatherData } from '../types/weather';
-import { SimHistoryChart } from './SimHistoryChart';
 import { WeatherIcon } from './WeatherIcon';
 
 interface WeatherDetailCardProps {
   weather: WeatherData;
   elevationMeters?: number;
-  isSimulated?: boolean;
-  simHistory?: SimHistoryPoint[];
   refreshing: boolean;
   onRefresh: (weather: WeatherData) => void;
   onClose: () => void;
@@ -20,8 +16,6 @@ interface WeatherDetailCardProps {
 export function WeatherDetailCard({
   weather,
   elevationMeters,
-  isSimulated = false,
-  simHistory,
   refreshing,
   onRefresh,
   onClose,
@@ -42,9 +36,8 @@ export function WeatherDetailCard({
     Math.ceil((WEATHER_CACHE_TTL_MS - elapsedMs) / 60000)
   );
 
-  const cacheStatusText = isSimulated
-    ? 'Hava Simülatörü · Canlı senaryo hesaplaması'
-    : weather.source === 'cache'
+  const cacheStatusText =
+    weather.source === 'cache'
       ? `Bellekten · ${elapsedMin === 0 ? 'Az önce' : `${elapsedMin} dk önce`} (${remainingMin} dk geçerli)`
       : 'Canlı veri · Az önce güncellendi';
 
@@ -124,13 +117,6 @@ export function WeatherDetailCard({
         )}
       </div>
 
-      {isSimulated && simHistory ? (
-        <SimHistoryChart
-          history={simHistory}
-          isPeak={typeof elevationMeters === 'number'}
-        />
-      ) : null}
-
       <div
         className={`weather-cache-banner ${
           weather.source === 'cache' ? 'is-cache' : 'is-live'
@@ -144,19 +130,17 @@ export function WeatherDetailCard({
         <span>{cacheStatusText}</span>
       </div>
 
-      {!isSimulated && (
-        <div className="inspect-actions">
-          <button
-            type="button"
-            className="btn-accent"
-            onClick={() => onRefresh(weather)}
-            disabled={refreshing}
-          >
-            <RefreshCw size={14} className={refreshing ? 'spin' : undefined} />
-            <span>{refreshing ? 'Güncelleniyor...' : 'Şimdi Yenile'}</span>
-          </button>
-        </div>
-      )}
+      <div className="inspect-actions">
+        <button
+          type="button"
+          className="btn-accent"
+          onClick={() => onRefresh(weather)}
+          disabled={refreshing}
+        >
+          <RefreshCw size={14} className={refreshing ? 'spin' : undefined} />
+          <span>{refreshing ? 'Güncelleniyor...' : 'Şimdi Yenile'}</span>
+        </button>
+      </div>
     </div>
   );
 }

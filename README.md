@@ -1,6 +1,6 @@
 # Topog — Dünya Fiziksel Haritası & Canlı Atmosfer Atlası
 
-**Aktif Sürüm:** `T 4.2` · **Sürüm Geçmişi:** [CHANGELOG.md](./CHANGELOG.md)
+**Aktif Sürüm:** `T 4.3` · **Sürüm Geçmişi:** [CHANGELOG.md](./CHANGELOG.md)
 
 Topog; tamamen ücretsiz, API anahtarı gerektirmeyen açık coğrafi ve meteorolojik veri kaynaklarıyla çalışan etkileşimli 2B/3B dünya fiziksel harita, canlı hava durumu, yağmur radarı ve uydu bulut örtüsü uygulamasıdır.
 
@@ -37,14 +37,8 @@ Topog; tamamen ücretsiz, API anahtarı gerektirmeyen açık coğrafi ve meteoro
 - **Yağmur Radarı (RainViewer):** Canlı yağış radarı, `%20 – %100` şeffaflık ayarı ve son 2 saat için **Oynat / Duraklat** animasyon çubuğu.
 - **Canlı Bulut Örtüsü (Uydu IR):** SSEC RealEarth küresel jeostasyoner uydu IR bulut katmanı (`z8`'e kadar yüksek çözünürlük, özel `cloud-ir://` şeffaf bulut protokolü) ve `%20 – %100` şeffaflık ayarı.
 
-### Hava Simülatörü 2.0 (İzole Mod)
-- **Canlı Atlas | Hava Simülatörü Sekmeleri:** Canlı hava verileri ve 15 dk önbelleklerden tamamen izole edilmiş etkileşimli fizik simülasyonu.
-- **60 FPS Canvas Atmosfer Motoru & Isı Haritası:** Organik çok duraklı radyal hava kütleleri, sürüklenen bulut lobları, sıcaklığa duyarlı yağmur/kar parçacıkları, cephe/siklon şimşekleri, canlı sıcaklık ısı haritası ve Marching Squares `0°C` donma sınırı izoterm konturu.
-- **Dalga & Basınç Sistemleri:** Haritaya tıklayarak **Soğuk Dalga (❄️)**, **Sıcak Dalga (🔥)**, **+ Nemli Kütle (🌧️)**, dönen **Siklon (`L`)** ve **Yüksek Basınç (`H`)** gönderme; **DEK (Deniz Etkili Kar)**, **Dağ Yağmur Gölgesi & Fön Etkisi** ve soğuk+sıcak çarpışmalarında cephe fırtınası oluşumu.
-- **1-Tıkla Senaryolar & Canlı Grafik:** *Sibirya DEK Karı*, *Sahra Sıcağı*, *Akdeniz Siklonu*, *Balkan Cephesi* hazır senaryoları; şehir/dağ detay kartında anlık sıcaklık ve kar kalınlığı (`cm`) zaman serisi grafiği.
-
 ### Sürüm Takibi
-- Uygulama içi sol üstteki **`T 4.2`** rozetine tıklayarak tüm sürüm notlarını (*Eklenenler / Yapılanlar / Çıkarılanlar*) görüntüleyebilirsiniz.
+- Uygulama içi sol üstteki **`T 4.3`** rozetine tıklayarak tüm sürüm notlarını (*Eklenenler / Yapılanlar / Çıkarılanlar*) görüntüleyebilirsiniz.
 - Proje kuralları ve uzman alt ajan rehberi [`AGENTS.md`](./AGENTS.md) ve [`.agents/agents/`](./.agents/agents/) içinde tutulur.
 
 ---

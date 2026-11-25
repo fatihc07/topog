@@ -19,18 +19,11 @@ import { buildNightPolygonGeoJson } from '../services/solarService';
 import { getWeatherMeta } from '../services/weatherService';
 import type { BaseLayerId, FlyTarget, TelemetryState } from '../types/map';
 import type {
-  AppMode,
-  SimFrontZone,
-  SimSeason,
-  SimWave,
-} from '../types/simulator';
-import type {
   PeakDisplayItem,
   RadarFrame,
   ViewportBounds,
   WeatherData,
 } from '../types/weather';
-import { SimulatorCanvasOverlay } from './SimulatorCanvasOverlay';
 import { getAnimatedWeatherSvg } from './WeatherIcon';
 
 export interface MapCanvasHandle {
@@ -41,13 +34,6 @@ export interface MapCanvasHandle {
 }
 
 interface MapCanvasProps {
-  appMode: AppMode;
-  simWaves: SimWave[];
-  simFronts: SimFrontZone[];
-  simSeason: SimSeason;
-  simWindDirDeg: number | null;
-  simShowHeatmap: boolean;
-  simPlaying: boolean;
   activeLayer: BaseLayerId;
   terrain3D: boolean;
   exaggeration: number;
@@ -75,7 +61,6 @@ interface MapCanvasProps {
   onViewportChange: (bounds: ViewportBounds) => void;
   onSelectWeather: (item: WeatherData) => void;
   onSelectPeak: (item: PeakDisplayItem) => void;
-  onLaunchSimWave: (lng: number, lat: number) => void;
   countryMode: boolean;
   onCountryLoadingChange?: (loading: boolean) => void;
 }
@@ -83,13 +68,6 @@ interface MapCanvasProps {
 export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
   function MapCanvas(
     {
-      appMode,
-      simWaves,
-      simFronts,
-      simSeason,
-      simWindDirDeg,
-      simShowHeatmap,
-      simPlaying,
       activeLayer,
       terrain3D,
       exaggeration,
@@ -117,7 +95,6 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
       onViewportChange,
       onSelectWeather,
       onSelectPeak,
-      onLaunchSimWave,
       countryMode,
       onCountryLoadingChange,
     },
@@ -132,7 +109,6 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
     const mountedRadarIdsRef = useRef<Set<string>>(new Set());
     const isLoadedRef = useRef(false);
     const terrainRef = useRef(terrain3D);
-    const appModeRef = useRef(appMode);
     const countryModeRef = useRef(countryMode);
     const countriesLoadedRef = useRef(false);
     const hoveredCountryIdRef = useRef<number | null>(null);
@@ -145,18 +121,15 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
     const onViewportRef = useRef(onViewportChange);
     const onSelectWeatherRef = useRef(onSelectWeather);
     const onSelectPeakRef = useRef(onSelectPeak);
-    const onLaunchSimWaveRef = useRef(onLaunchSimWave);
     const onCountryLoadingRef = useRef(onCountryLoadingChange);
 
     terrainRef.current = terrain3D;
-    appModeRef.current = appMode;
     countryModeRef.current = countryMode;
     onTelemetryRef.current = onTelemetryChange;
     onInspectRef.current = onInspectPoint;
     onViewportRef.current = onViewportChange;
     onSelectWeatherRef.current = onSelectWeather;
     onSelectPeakRef.current = onSelectPeak;
-    onLaunchSimWaveRef.current = onLaunchSimWave;
     onCountryLoadingRef.current = onCountryLoadingChange;
 
     const clearCountryHover = () => {
@@ -353,15 +326,12 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
                 flag: isoToFlagEmoji(iso),
               });
             }
-            if (appModeRef.current !== 'simulator') {
-              map.getCanvas().style.cursor = 'pointer';
-            }
+            map.getCanvas().style.cursor = 'pointer';
           } else {
             if (hoveredCountryIdRef.current !== null) {
               clearCountryHover();
             }
-            map.getCanvas().style.cursor =
-              appModeRef.current === 'simulator' ? 'crosshair' : '';
+            map.getCanvas().style.cursor = '';
           }
         }
       });
@@ -370,8 +340,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
         if (hoveredCountryIdRef.current !== null) {
           clearCountryHover();
         }
-        map.getCanvas().style.cursor =
-          appModeRef.current === 'simulator' ? 'crosshair' : '';
+        map.getCanvas().style.cursor = '';
       };
 
       const canvasEl = map.getCanvas();
@@ -386,11 +355,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
       });
 
       map.on('click', (e) => {
-        if (appModeRef.current === 'simulator') {
-          onLaunchSimWaveRef.current(e.lngLat.lng, e.lngLat.lat);
-        } else {
-          onInspectRef.current(e.lngLat.lng, e.lngLat.lat);
-        }
+        onInspectRef.current(e.lngLat.lng, e.lngLat.lat);
       });
 
       mapRef.current = map;
@@ -518,28 +483,6 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
       }
     }, [globeMode]);
 
-    // Sync Simulator cursor & keep legacy GeoJSON overlay layers hidden (rendered on SimulatorCanvasOverlay)
-    useEffect(() => {
-      const map = mapRef.current;
-      if (!map) return;
-
-      map.getCanvas().style.cursor = appMode === 'simulator' ? 'crosshair' : '';
-
-      if (!isLoadedRef.current) return;
-
-      const simLayerIds = [
-        'sim-waves-fill',
-        'sim-waves-line',
-        'sim-clouds-fill',
-        'sim-precip-fill',
-      ];
-      for (const lid of simLayerIds) {
-        if (map.getLayer(lid)) {
-          map.setLayoutProperty(lid, 'visibility', 'none');
-        }
-      }
-    }, [appMode]);
-
     // Sync Country Mode (lazy-load countries GeoJSON + layer visibility)
     useEffect(() => {
       const map = mapRef.current;
@@ -559,8 +502,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
         }
         clearCountryHover();
         onCountryLoadingRef.current?.(false);
-        map.getCanvas().style.cursor =
-          appModeRef.current === 'simulator' ? 'crosshair' : '';
+        map.getCanvas().style.cursor = '';
         return;
       }
 
@@ -600,7 +542,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
       };
     }, [countryMode, mapInstance]);
 
-    // Sync NASA GIBS / SSEC RealEarth Cloud Cover overlay (hidden in simulator mode)
+    // Sync NASA GIBS / SSEC RealEarth Cloud Cover overlay
     useEffect(() => {
       const map = mapRef.current;
       if (!map || !isLoadedRef.current) return;
@@ -608,11 +550,11 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
         map.setLayoutProperty(
           'clouds-overlay',
           'visibility',
-          appMode === 'live' && cloudsEnabled ? 'visible' : 'none'
+          cloudsEnabled ? 'visible' : 'none'
         );
         map.setPaintProperty('clouds-overlay', 'raster-opacity', cloudsOpacity);
       }
-    }, [appMode, cloudsEnabled, cloudsOpacity]);
+    }, [cloudsEnabled, cloudsOpacity]);
 
     // Sync RainViewer Radar overlay & 2h animation frames without flicker
     useEffect(() => {
@@ -621,7 +563,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
 
       const mountedIds = mountedRadarIdsRef.current;
 
-      if (appMode !== 'live' || !rainEnabled || radarFrames.length === 0) {
+      if (!rainEnabled || radarFrames.length === 0) {
         for (const id of mountedIds) {
           if (map.getLayer(id)) {
             map.setLayoutProperty(id, 'visibility', 'none');
@@ -683,7 +625,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
           );
         }
       }
-    }, [appMode, rainEnabled, rainOpacity, radarFrames, activeRadarIndex]);
+    }, [rainEnabled, rainOpacity, radarFrames, activeRadarIndex]);
 
     // Handle flyTo requests
     useEffect(() => {
@@ -752,17 +694,12 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
 
         const buildBadgeContent = (btn: HTMLButtonElement) => {
           btn.className = `weather-badge${isSelected ? ' selected' : ''}`;
-          const sourceLabel =
-            appMode === 'simulator'
-              ? 'Simülatör'
-              : item.source === 'cache'
-                ? 'Bellekten'
-                : 'Canlı';
+          const sourceLabel = item.source === 'cache' ? 'Bellekten' : 'Canlı';
           const feelsLike = Number.isFinite(item.apparentTemperature)
             ? Math.round(item.apparentTemperature)
             : null;
           btn.title =
-            appMode === 'live' && feelsLike !== null
+            feelsLike !== null
               ? `${item.cityName}: ${Math.round(item.temperature)}°C · Hissedilen: ${feelsLike}°C · ${meta.label} (${sourceLabel})`
               : `${item.cityName}: ${Math.round(item.temperature)}°C · ${meta.label} (${sourceLabel})`;
           btn.innerHTML = '';
@@ -784,20 +721,18 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
           tempSpan.textContent = `${Math.round(item.temperature)}°`;
 
           btn.append(iconSpan, nameSpan, tempSpan);
-          if (appMode === 'live' && feelsLike !== null) {
+          if (feelsLike !== null) {
             const feelsSpan = document.createElement('span');
             feelsSpan.className = 'weather-badge-feels';
             feelsSpan.textContent = `H ${feelsLike}°`;
             feelsSpan.title = `Hissedilen sıcaklık: ${feelsLike}°C`;
             btn.append(feelsSpan);
           }
-          if (appMode === 'live') {
-            const dotSpan = document.createElement('span');
-            dotSpan.className = `cache-dot ${
-              item.source === 'cache' ? 'cached' : 'live'
-            }`;
-            btn.append(dotSpan);
-          }
+          const dotSpan = document.createElement('span');
+          dotSpan.className = `cache-dot ${
+            item.source === 'cache' ? 'cached' : 'live'
+          }`;
+          btn.append(dotSpan);
           btn.onclick = (ev) => {
             ev.stopPropagation();
             onSelectWeatherRef.current(item);
@@ -830,7 +765,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
           markers.set(item.cityId, marker);
         }
       }
-    }, [appMode, weatherItems, selectedWeatherCityId]);
+    }, [weatherItems, selectedWeatherCityId]);
 
     // Reconcile mountain peak markers (name + elevation + real summit temp if available)
     useEffect(() => {
@@ -863,11 +798,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
                 ? ` · Kar: ${weather.snowDepthCm.toLocaleString('tr-TR')} cm`
                 : '';
             const sourceLabel =
-              appMode === 'simulator'
-                ? 'Simülatör'
-                : weather.source === 'cache'
-                  ? 'Bellekten'
-                  : 'Canlı';
+              weather.source === 'cache' ? 'Bellekten' : 'Canlı';
             btn.title = `${peak.name} (${eleLabel}): ${Math.round(
               weather.temperature
             )}°C · ${meta.label}${snowTip} (${sourceLabel})`;
@@ -914,14 +845,12 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
               btn.append(snowSpan);
             }
 
-            if (appMode === 'live') {
-              const dotSpan = document.createElement('span');
-              dotSpan.className = `cache-dot ${
-                weather.source === 'cache' ? 'cached' : 'live'
-              }`;
+            const dotSpan = document.createElement('span');
+            dotSpan.className = `cache-dot ${
+              weather.source === 'cache' ? 'cached' : 'live'
+            }`;
 
-              btn.append(dotSpan);
-            }
+            btn.append(dotSpan);
           }
 
           btn.onclick = (ev) => {
@@ -956,21 +885,11 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
           markers.set(peak.id, marker);
         }
       }
-    }, [appMode, peakItems, selectedPeakId]);
+    }, [peakItems, selectedPeakId]);
 
     return (
       <>
         <div ref={containerRef} className="map-container" />
-        <SimulatorCanvasOverlay
-          map={mapInstance}
-          active={appMode === 'simulator'}
-          waves={simWaves}
-          fronts={simFronts}
-          season={simSeason}
-          windDirDeg={simWindDirDeg}
-          showHeatmap={simShowHeatmap}
-          playing={simPlaying}
-        />
         {countryMode && hoveredCountry && (
           <div
             ref={countryTooltipRef}

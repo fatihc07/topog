@@ -7,6 +7,21 @@ Sürüm numaralandırma kuralı: **`T <Büyük>.<Küçük>`**
 
 ---
 
+## [T 4.3] — 2026-11-25
+**Arayüz Sadeleştirmesi — Hava Simülatörü Modu Kaldırıldı**
+
+### Eklenenler
+- Bu sürümde eklenen yeni bir özellik yoktur.
+
+### Yapılanlar / İyileştirmeler
+- Uygulama yalnızca Canlı Atlas, Ülke Modu ve Hissedilen Sıcaklık (`H XX°`) özellikleriyle sadeleştirildi.
+
+### Çıkarılanlar
+- **Hava Simülatörü Modu Tamamen Kaldırıldı**: `src/components/ModeTabs.tsx`, `src/components/SimulatorDock.tsx`, `src/components/SimulatorCanvasOverlay.tsx`, `src/components/SimHistoryChart.tsx`, `src/services/simulatorEngine.ts`, `src/services/simulatorScenarios.ts` ve `src/types/simulator.ts` dosyaları silindi.
+- `src/App.tsx`, `src/components/MapCanvas.tsx`, `src/components/WeatherDetailCard.tsx`, `src/components/TelemetryBar.tsx`, `src/config/layers.ts` ve `src/index.css` içindeki tüm simülatör durumları, döngüleri, MapLibre GeoJSON katmanları ve stiller temizlendi.
+
+---
+
 ## [T 4.2] — 2026-11-25
 **Canlı Şehir Rozetlerinde Hissedilen Sıcaklık (`H XX°`)**
 

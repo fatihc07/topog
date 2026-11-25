@@ -7,9 +7,22 @@ export interface ReleaseEntry {
   removed: string[];
 }
 
-export const APP_VERSION = 'T 4.2';
+export const APP_VERSION = 'T 4.3';
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
+  {
+    version: 'T 4.3',
+    date: '2026-11-25',
+    title: 'Arayüz Sadeleştirmesi — Hava Simülatörü Modu Kaldırıldı',
+    added: [],
+    changed: [
+      'Uygulama yalnızca gerçek zamanlı Canlı Atlas, Ülke Modu ve Hissedilen Sıcaklık (H XX°) özellikleriyle sadeleştirildi.',
+    ],
+    removed: [
+      'Hava Simülatörü modu tamamen kaldırıldı: src/components/ModeTabs.tsx, SimulatorDock.tsx, SimulatorCanvasOverlay.tsx, SimHistoryChart.tsx, src/services/simulatorEngine.ts, simulatorScenarios.ts ve src/types/simulator.ts dosyaları silindi.',
+      'src/App.tsx, MapCanvas.tsx, WeatherDetailCard.tsx, TelemetryBar.tsx, src/config/layers.ts ve src/index.css içindeki tüm simülatör durumları, döngüleri, MapLibre GeoJSON katmanları ve stilleri temizlendi.',
+    ],
+  },
   {
     version: 'T 4.2',
     date: '2026-11-25',
