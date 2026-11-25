@@ -249,8 +249,8 @@ export function LayerPanel({
               <div className="toggle-label-group">
                 <Cloud size={16} color="#e2e8f0" />
                 <div>
-                  <div className="toggle-label-title">Bulut Örtüsü (NASA GIBS)</div>
-                  <div className="toggle-label-sub">MODIS Terra küresel uydu bulut katmanı</div>
+                  <div className="toggle-label-title">Canlı Bulut Örtüsü (Uydu IR)</div>
+                  <div className="toggle-label-sub">SSEC RealEarth küresel jeostasyoner bulutlar</div>
                 </div>
               </div>
               <button

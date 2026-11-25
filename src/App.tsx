@@ -61,7 +61,7 @@ export default function App() {
   const [rainLoading, setRainLoading] = useState(false);
 
   const [cloudsEnabled, setCloudsEnabled] = useState(false);
-  const [cloudsOpacity, setCloudsOpacity] = useState(0.65);
+  const [cloudsOpacity, setCloudsOpacity] = useState(0.8);
 
   const [weatherEnabled, setWeatherEnabled] = useState(true);
   const [weatherBadgeOpacity, setWeatherBadgeOpacity] = useState(0.92);

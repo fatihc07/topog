@@ -7,6 +7,22 @@ Sürüm numaralandırma kuralı: **`T <Büyük>.<Küçük>`**
 
 ---
 
+## [T 1.2] — 2026-11-25
+**Canlı Küresel Jeostasyoner Uydu IR Bulut Katmanı**
+
+### Eklenenler
+- SSEC RealEarth küresel jeostasyoner uydu IR bulut katmanı eklendi (`z8` seviyesine kadar yüksek çözünürlük).
+- Açık gökyüzünü tamamen şeffaflaştırıp yalnızca doğal beyaz bulutları çizen özel `cloud-ir://` MapLibre protokolü (`src/services/cloudProtocol.ts`) eklendi.
+
+### Yapılanlar / İyileştirmeler
+- Bulut katmanı varsayılan şeffaflığı `%80` yapıldı (`src/App.tsx`, `src/config/layers.ts`).
+- Katman panelindeki etiket `Canlı Bulut Örtüsü (Uydu IR)` ve alt açıklama `SSEC RealEarth küresel jeostasyoner bulutlar` olarak güncellendi (`src/components/LayerPanel.tsx`, `src/components/MapCanvas.tsx`).
+
+### Çıkarılanlar
+- Düşük çözünürlüklü ve bloklu görünüme sahip NASA GIBS `MODIS_Terra_Cloud_Fraction_Day` bulut katmanı kaldırıldı.
+
+---
+
 ## [T 1.1] — 2026-11-25
 **Şehir Etiketlerinde Yalnızca Arka Plan Şeffaflığı**
 

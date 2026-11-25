@@ -2,6 +2,7 @@ import { useEffect, useImperativeHandle, useRef, forwardRef } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { BASE_LAYERS, buildInitialStyle } from '../config/layers';
+import { registerCloudProtocol } from '../services/cloudProtocol';
 import { getWeatherMeta } from '../services/weatherService';
 import type { BaseLayerId, FlyTarget, TelemetryState } from '../types/map';
 import type { RadarFrame, ViewportBounds, WeatherData } from '../types/weather';
@@ -115,6 +116,8 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
     // Initialize MapLibre GL JS instance once
     useEffect(() => {
       if (!containerRef.current || mapRef.current) return;
+
+      registerCloudProtocol();
 
       const map = new maplibregl.Map({
         container: containerRef.current,

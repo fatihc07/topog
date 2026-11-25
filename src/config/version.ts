@@ -7,9 +7,25 @@ export interface ReleaseEntry {
   removed: string[];
 }
 
-export const APP_VERSION = 'T 1.1';
+export const APP_VERSION = 'T 1.2';
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
+  {
+    version: 'T 1.2',
+    date: '2026-11-25',
+    title: 'Canlı Küresel Jeostasyoner Uydu IR Bulut Katmanı',
+    added: [
+      'SSEC RealEarth küresel jeostasyoner uydu IR bulut katmanı eklendi (z8 seviyesine kadar yüksek çözünürlük).',
+      'Açık gökyüzünü tamamen şeffaflaştırıp yalnızca doğal beyaz bulutları çizen özel cloud-ir:// MapLibre protokolü (src/services/cloudProtocol.ts) eklendi.',
+    ],
+    changed: [
+      'Bulut katmanı varsayılan şeffaflığı %80 olarak ayarlandı.',
+      'Katman panelindeki başlık ve alt etiket "Canlı Bulut Örtüsü (Uydu IR)" / "SSEC RealEarth küresel jeostasyoner bulutlar" olarak güncellendi.',
+    ],
+    removed: [
+      'Düşük çözünürlüklü ve bloklu görünüme sahip NASA GIBS MODIS_Terra_Cloud_Fraction_Day bulut katmanı kaldırıldı.',
+    ],
+  },
   {
     version: 'T 1.1',
     date: '2026-11-25',

@@ -81,9 +81,7 @@ export const TERRARIUM_DEM_TILES = [
   'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
 ];
 
-export const NASA_GIBS_CLOUDS_TILES = [
-  'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_Cloud_Fraction_Day/default/default/GoogleMapsCompatible_Level6/{z}/{y}/{x}.png',
-];
+export const REALTIME_CLOUDS_TILES = ['cloud-ir://{z}/{x}/{y}'];
 
 export const FEATURED_LANDMARKS: LandmarkPreset[] = [
   {
@@ -225,23 +223,23 @@ export function buildInitialStyle(defaultLayer: BaseLayerId): StyleSpecification
     },
   });
 
-  sources['source-clouds-gibs'] = {
+  sources['source-clouds-live'] = {
     type: 'raster',
-    tiles: NASA_GIBS_CLOUDS_TILES,
+    tiles: REALTIME_CLOUDS_TILES,
     tileSize: 256,
-    maxzoom: 6,
-    attribution: '© NASA GIBS (MODIS Terra)',
+    maxzoom: 8,
+    attribution: '© SSEC RealEarth (Global IR Uydu)',
   };
 
   layers.push({
     id: 'clouds-overlay',
     type: 'raster',
-    source: 'source-clouds-gibs',
+    source: 'source-clouds-live',
     layout: {
       visibility: 'none',
     },
     paint: {
-      'raster-opacity': 0.65,
+      'raster-opacity': 0.8,
       'raster-fade-duration': 200,
     },
   });
