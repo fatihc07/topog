@@ -7,6 +7,21 @@ Sürüm numaralandırma kuralı: **`T <Büyük>.<Küçük>`**
 
 ---
 
+## [T 2.1] — 2026-11-25
+**Arayüz Sadeleştirmesi — Drone Uçuş Modu Kaldırıldı**
+
+### Eklenenler
+- Bu sürümde eklenen yeni bir özellik yoktur.
+
+### Yapılanlar / İyileştirmeler
+- Arayüz ve harita kontrolleri sadeleştirildi; `Güneş & Gece Sınırı` ve `Yağmur Radarı` zaman çizelgeleri alt alanda çakışmasız şekilde korundu.
+
+### Çıkarılanlar
+- Sinematik 3D Drone Uçuş Modu (`src/components/FlyoverBar.tsx` ve `src/services/flyoverPresets.ts`) tamamen kaldırıldı.
+- Katman panelindeki `3B Drone Uçuşu` anahtarı, inceleme/hava durumu kartlarındaki `Drone Uçuşu` / `3D Uçuş` butonları, `MapCanvas` yörünge animasyon döngüsü ve ilgili CSS kuralları temizlendi (`MapCanvas.tsx`, `LayerPanel.tsx`, `InspectCard.tsx`, `WeatherDetailCard.tsx`, `App.tsx`, `index.css`).
+
+---
+
 ## [T 2.0] — 2026-11-25
 **Büyük Sürüm — Gece/Gündüz Sınırı & 3D Güneş Gölgesi, Canlı Deniz & Dalga Verisi, Sinematik 3D Drone Uçuşu**
 

@@ -12,7 +12,6 @@ import {
   Sun,
   Sunset,
   Trash2,
-  Video,
 } from 'lucide-react';
 import { BASE_LAYERS } from '../config/layers';
 import type { BaseLayerId } from '../types/map';
@@ -24,7 +23,6 @@ interface LayerPanelProps {
   hillshade: boolean;
   globeMode: boolean;
   solarEnabled: boolean;
-  flyoverActive: boolean;
   weatherEnabled: boolean;
   weatherBadgeOpacity: number;
   weatherCacheCount: number;
@@ -40,7 +38,6 @@ interface LayerPanelProps {
   onToggleHillshade: () => void;
   onToggleGlobeMode: () => void;
   onToggleSolar: () => void;
-  onToggleFlyover: () => void;
   onToggleWeather: () => void;
   onChangeWeatherBadgeOpacity: (value: number) => void;
   onClearWeatherCache: () => void;
@@ -58,7 +55,6 @@ export function LayerPanel({
   hillshade,
   globeMode,
   solarEnabled,
-  flyoverActive,
   weatherEnabled,
   weatherBadgeOpacity,
   weatherCacheCount,
@@ -74,7 +70,6 @@ export function LayerPanel({
   onToggleHillshade,
   onToggleGlobeMode,
   onToggleSolar,
-  onToggleFlyover,
   onToggleWeather,
   onChangeWeatherBadgeOpacity,
   onClearWeatherCache,
@@ -225,25 +220,6 @@ export function LayerPanel({
                 aria-checked={solarEnabled}
                 className={`switch-btn ${solarEnabled ? 'on' : ''}`}
                 onClick={onToggleSolar}
-              >
-                <span className="switch-thumb" />
-              </button>
-            </div>
-
-            <div className="toggle-row">
-              <div className="toggle-label-group">
-                <Video size={16} color="#38bdf8" />
-                <div>
-                  <div className="toggle-label-title">3B Drone Uçuşu</div>
-                  <div className="toggle-label-sub">Zirveler üzerinde sinematik yörünge</div>
-                </div>
-              </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={flyoverActive}
-                className={`switch-btn ${flyoverActive ? 'on' : ''}`}
-                onClick={onToggleFlyover}
               >
                 <span className="switch-thumb" />
               </button>

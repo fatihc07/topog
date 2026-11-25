@@ -7,9 +7,22 @@ export interface ReleaseEntry {
   removed: string[];
 }
 
-export const APP_VERSION = 'T 2.0';
+export const APP_VERSION = 'T 2.1';
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
+  {
+    version: 'T 2.1',
+    date: '2026-11-25',
+    title: 'Arayüz Sadeleştirmesi — Drone Uçuş Modu Kaldırıldı',
+    added: [],
+    changed: [
+      'Arayüz ve harita kontrolleri sadeleştirildi; Güneş & Gece Sınırı ve Yağmur Radarı zaman çizelgeleri alt alanda çakışmasız şekilde korundu.',
+    ],
+    removed: [
+      'Sinematik 3D Drone Uçuş Modu (src/components/FlyoverBar.tsx ve src/services/flyoverPresets.ts) tamamen kaldırıldı.',
+      'Katman panelindeki 3B Drone Uçuşu anahtarı, inceleme ve hava durumu kartlarındaki Drone Uçuşu / 3D Uçuş butonları, MapCanvas yörünge animasyon döngüsü ve ilgili CSS kuralları temizlendi.',
+    ],
+  },
   {
     version: 'T 2.0',
     date: '2026-11-25',

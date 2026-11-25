@@ -31,10 +31,6 @@ interface MapCanvasProps {
   solarDateMs: number;
   sunAzimuthDeg: number;
   sunElevationDeg: number;
-  flyoverActive: boolean;
-  flyoverPlaying: boolean;
-  flyoverSpeed: number;
-  flyoverPitch: number;
   cloudsEnabled: boolean;
   cloudsOpacity: number;
   rainEnabled: boolean;
@@ -67,10 +63,6 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
       solarDateMs,
       sunAzimuthDeg,
       sunElevationDeg,
-      flyoverActive,
-      flyoverPlaying,
-      flyoverSpeed,
-      flyoverPitch,
       cloudsEnabled,
       cloudsOpacity,
       rainEnabled,
@@ -355,32 +347,6 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
       nightSource?.setData(nightPolygon);
       lineSource?.setData(terminatorLine);
     }, [solarEnabled, solarDateMs]);
-
-    // Sync Cinematic 3D Drone Flyover orbit
-    useEffect(() => {
-      const map = mapRef.current;
-      if (!map || !flyoverActive) return;
-
-      if (Math.abs(map.getPitch() - flyoverPitch) > 2) {
-        map.easeTo({ pitch: flyoverPitch, duration: 500 });
-      }
-
-      if (!flyoverPlaying) return;
-
-      let rafId = 0;
-      let lastTime = performance.now();
-
-      const step = (now: number) => {
-        const dt = Math.min(0.1, (now - lastTime) / 1000);
-        lastTime = now;
-        const currentBearing = map.getBearing();
-        map.setBearing((currentBearing + dt * 14 * flyoverSpeed) % 360);
-        rafId = requestAnimationFrame(step);
-      };
-
-      rafId = requestAnimationFrame(step);
-      return () => cancelAnimationFrame(rafId);
-    }, [flyoverActive, flyoverPlaying, flyoverSpeed, flyoverPitch]);
 
     // Sync Globe / Mercator projection
     useEffect(() => {
