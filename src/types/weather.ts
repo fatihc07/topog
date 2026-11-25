@@ -21,6 +21,8 @@ export interface WeatherData {
   pressure: number | null;
   weatherCode: number;
   isDay: boolean;
+  snowDepthCm?: number | null;
+  snowfallCm?: number | null;
   fetchedAt: number;
   source: 'live' | 'cache';
 }

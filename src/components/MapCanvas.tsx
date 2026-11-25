@@ -550,9 +550,13 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
 
           if (weather) {
             const meta = getWeatherMeta(weather.weatherCode, weather.isDay);
+            const snowTip =
+              typeof weather.snowDepthCm === 'number' && weather.snowDepthCm > 0
+                ? ` · Kar: ${weather.snowDepthCm.toLocaleString('tr-TR')} cm`
+                : '';
             btn.title = `${peak.name} (${eleLabel}): ${Math.round(
               weather.temperature
-            )}°C · ${meta.label} (${
+            )}°C · ${meta.label}${snowTip} (${
               weather.source === 'cache' ? 'Bellekten' : 'Canlı'
             })`;
           } else {
@@ -589,12 +593,21 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
             tempSpan.className = 'peak-badge-temp';
             tempSpan.textContent = `${Math.round(weather.temperature)}°`;
 
+            btn.append(iconSpan, tempSpan);
+
+            if (typeof weather.snowDepthCm === 'number' && weather.snowDepthCm > 0) {
+              const snowSpan = document.createElement('span');
+              snowSpan.className = 'peak-badge-snow';
+              snowSpan.textContent = `❄ ${weather.snowDepthCm.toLocaleString('tr-TR')} cm`;
+              btn.append(snowSpan);
+            }
+
             const dotSpan = document.createElement('span');
             dotSpan.className = `cache-dot ${
               weather.source === 'cache' ? 'cached' : 'live'
             }`;
 
-            btn.append(iconSpan, tempSpan, dotSpan);
+            btn.append(dotSpan);
           }
 
           btn.onclick = (ev) => {

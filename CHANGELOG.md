@@ -7,6 +7,22 @@ Sürüm numaralandırma kuralı: **`T <Büyük>.<Küçük>`**
 
 ---
 
+## [T 1.4] — 2026-11-25
+**Dağ ve Zirvelerde Gerçek Anlık Kar Kalınlığı**
+
+### Eklenenler
+- Dağ/zirve Open-Meteo sorgusuna gerçek anlık kar kalınlığı (`snow_depth`) ve taze kar yağışı (`snowfall`) verileri eklendi (`src/services/peakService.ts`, `src/types/weather.ts`).
+- Zirvede gerçek kar kalınlığı (`>= 1 cm`) varsa harita etiketlerinde `❄ XX cm` göstergesi (`MapCanvas.tsx`) ve detay kartında `Kar Kalınlığı` kutusu (`WeatherDetailCard.tsx`, `index.css`) görüntülenir.
+
+### Yapılanlar / İyileştirmeler
+- Kar olmayan veya kar kalınlığı verisi bulunmayan dağlarda kar göstergesi kesinlikle gösterilmez.
+- 15 dakikalık RAM + `localStorage` önbellek kuralı kar kalınlığı verisi için de geçerlidir.
+
+### Çıkarılanlar
+- Bu sürümde kaldırılan bir özellik yoktur.
+
+---
+
 ## [T 1.3] — 2026-11-25
 **Dağlar & Zirveler Katmanı ve Gerçek Zirve Sıcaklığı**
 

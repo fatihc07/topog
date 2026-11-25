@@ -166,6 +166,8 @@ interface OpenMeteoCurrentBlock {
   wind_speed_10m?: number;
   surface_pressure?: number;
   is_day?: number;
+  snow_depth?: number;
+  snowfall?: number;
 }
 
 interface OpenMeteoForecastResponse {
@@ -198,7 +200,7 @@ export async function fetchPeakWeatherBatch(
     const cacheId = getPeakCacheId(peak.id);
     if (!forceRefresh) {
       const cached = getFreshWeather(cacheId, now);
-      if (cached) {
+      if (cached && cached.snowDepthCm !== undefined) {
         weatherByPeakId.set(peak.id, cached);
         fromCacheCount += 1;
         continue;
@@ -218,7 +220,7 @@ export async function fetchPeakWeatherBatch(
       const url =
         `https://api.open-meteo.com/v1/forecast` +
         `?latitude=${lats}&longitude=${lngs}&elevation=${eles}` +
-        `&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,surface_pressure,is_day`;
+        `&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,surface_pressure,is_day,snow_depth,snowfall`;
 
       const response = await fetch(url, {
         signal: options?.signal,
@@ -240,6 +242,20 @@ export async function fetchPeakWeatherBatch(
           if (!cur || typeof cur.temperature_2m !== 'number' || !Number.isFinite(cur.temperature_2m)) {
             continue;
           }
+
+          const snowDepthCm =
+            typeof cur.snow_depth === 'number' &&
+            Number.isFinite(cur.snow_depth) &&
+            cur.snow_depth >= 0.01
+              ? Math.round(cur.snow_depth * 100)
+              : null;
+
+          const snowfallCm =
+            typeof cur.snowfall === 'number' &&
+            Number.isFinite(cur.snowfall) &&
+            cur.snowfall > 0
+              ? Math.round(cur.snowfall * 10) / 10
+              : null;
 
           const entry: WeatherData = {
             cityId: getPeakCacheId(peak.id),
@@ -264,6 +280,8 @@ export async function fetchPeakWeatherBatch(
                 : null,
             weatherCode: typeof cur.weather_code === 'number' ? cur.weather_code : 0,
             isDay: cur.is_day !== 0,
+            snowDepthCm,
+            snowfallCm,
             fetchedAt,
             source: 'live',
           };

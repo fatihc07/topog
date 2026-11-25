@@ -104,6 +104,17 @@ export function WeatherDetailCard({
             {weather.pressure !== null ? `${weather.pressure} hPa` : '—'}
           </div>
         </div>
+        {typeof weather.snowDepthCm === 'number' && weather.snowDepthCm > 0 && (
+          <div className="inspect-stat" style={{ gridColumn: '1 / -1' }}>
+            <div className="inspect-stat-label">Kar Kalınlığı</div>
+            <div className="inspect-stat-value snow">
+              ❄ {weather.snowDepthCm.toLocaleString('tr-TR')} cm
+              {typeof weather.snowfallCm === 'number' && weather.snowfallCm > 0
+                ? ` · +${weather.snowfallCm} cm taze kar`
+                : ''}
+            </div>
+          </div>
+        )}
       </div>
 
       <div

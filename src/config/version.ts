@@ -7,9 +7,23 @@ export interface ReleaseEntry {
   removed: string[];
 }
 
-export const APP_VERSION = 'T 1.3';
+export const APP_VERSION = 'T 1.4';
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
+  {
+    version: 'T 1.4',
+    date: '2026-11-25',
+    title: 'Dağ ve Zirvelerde Gerçek Anlık Kar Kalınlığı',
+    added: [
+      'Dağ/zirve Open-Meteo sorgusuna gerçek anlık kar kalınlığı (snow_depth) ve taze kar yağışı (snowfall) verileri eklendi (src/services/peakService.ts, src/types/weather.ts).',
+      'Zirvede gerçek kar kalınlığı (>= 1 cm) varsa harita etiketlerinde ❄ XX cm göstergesi (MapCanvas.tsx) ve detay kartında Kar Kalınlığı kutusu (WeatherDetailCard.tsx, index.css) görüntülenir.',
+    ],
+    changed: [
+      'Kar olmayan veya kar kalınlığı verisi bulunmayan dağlarda kar göstergesi kesinlikle gösterilmez.',
+      '15 dakikalık RAM + localStorage önbellek kuralı kar kalınlığı verisi için de geçerli hale getirildi.',
+    ],
+    removed: [],
+  },
   {
     version: 'T 1.3',
     date: '2026-11-25',
