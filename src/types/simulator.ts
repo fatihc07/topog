@@ -4,9 +4,15 @@ export type SimWaveKind = 'cold' | 'warm' | 'moisture';
 
 export type SimSeason = 'winter' | 'spring' | 'summer' | 'autumn';
 
+export interface SimToolSelection {
+  thermal: 'cold' | 'warm' | null;
+  moisture: boolean;
+}
+
 export interface SimWave {
   id: string;
   kind: SimWaveKind;
+  withMoisture: boolean;
   lng: number;
   lat: number;
   originLng: number;

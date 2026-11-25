@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react';
 import {
   CloudRain,
   Flame,
@@ -7,12 +6,11 @@ import {
   Snowflake,
   Trash2,
 } from 'lucide-react';
-
-type WaveTool = 'cold' | 'warm' | 'moisture';
-type SimSeason = 'winter' | 'spring' | 'summer' | 'autumn';
+import type { SimSeason } from '../types/simulator';
 
 export interface SimulatorDockProps {
-  activeTool: WaveTool;
+  thermalTool: 'cold' | 'warm' | null;
+  moistureActive: boolean;
   intensity: number;
   windDirDeg: number | null;
   playing: boolean;
@@ -20,7 +18,8 @@ export interface SimulatorDockProps {
   season: SimSeason;
   waveCount: number;
   frontCount: number;
-  onSelectTool: (tool: WaveTool) => void;
+  onToggleThermal: (kind: 'cold' | 'warm') => void;
+  onToggleMoisture: () => void;
   onChangeIntensity: (val: number) => void;
   onChangeWindDir: (deg: number | null) => void;
   onTogglePlay: () => void;
@@ -28,28 +27,6 @@ export interface SimulatorDockProps {
   onChangeSeason: (season: SimSeason) => void;
   onClearWaves: () => void;
 }
-
-const WAVE_TOOLS: Array<{
-  id: WaveTool;
-  label: string;
-  icon: ReactNode;
-}> = [
-  {
-    id: 'cold',
-    label: 'Soğuk Dalga',
-    icon: <Snowflake size={14} aria-hidden="true" />,
-  },
-  {
-    id: 'warm',
-    label: 'Sıcak Dalga',
-    icon: <Flame size={14} aria-hidden="true" />,
-  },
-  {
-    id: 'moisture',
-    label: 'Nemli Kütle',
-    icon: <CloudRain size={14} aria-hidden="true" />,
-  },
-];
 
 const SPEED_OPTIONS = [0.5, 1, 2] as const;
 
@@ -72,8 +49,24 @@ const WIND_DIR_OPTIONS: Array<{ deg: number | null; label: string }> = [
   { deg: 315, label: 'KB' },
 ];
 
+function getActiveComboHint(
+  thermalTool: 'cold' | 'warm' | null,
+  moistureActive: boolean
+): string {
+  if (thermalTool === 'cold' && moistureActive) {
+    return '❄️+🌧️ ≤0°C Kar · >0°C Yağmur';
+  }
+  if (thermalTool === 'warm' && moistureActive) {
+    return '🔥+🌧️ Sıcak Yağış Kütlesi';
+  }
+  if (thermalTool === 'cold') return '❄️ Kuru Soğuk Dalga';
+  if (thermalTool === 'warm') return '🔥 Kuru Sıcak Dalga';
+  return '🌧️ Nemli Yağış Kütlesi';
+}
+
 export function SimulatorDock({
-  activeTool,
+  thermalTool,
+  moistureActive,
   intensity,
   windDirDeg,
   playing,
@@ -81,7 +74,8 @@ export function SimulatorDock({
   season,
   waveCount,
   frontCount,
-  onSelectTool,
+  onToggleThermal,
+  onToggleMoisture,
   onChangeIntensity,
   onChangeWindDir,
   onTogglePlay,
@@ -89,6 +83,8 @@ export function SimulatorDock({
   onChangeSeason,
   onClearWaves,
 }: SimulatorDockProps) {
+  const comboHint = getActiveComboHint(thermalTool, moistureActive);
+
   return (
     <div
       className="glass-panel sim-dock"
@@ -96,27 +92,50 @@ export function SimulatorDock({
       aria-label="Hava Simülatörü Kontrol Paneli"
     >
       <div className="sim-dock-row sim-dock-top">
-        <div className="sim-tools-group" role="group" aria-label="Dalga türleri">
-          {WAVE_TOOLS.map((tool) => {
-            const isActive = activeTool === tool.id;
-            return (
-              <button
-                key={tool.id}
-                type="button"
-                className={`sim-tool-btn is-${tool.id} ${
-                  isActive ? 'is-active' : ''
-                }`}
-                aria-pressed={isActive}
-                onClick={() => onSelectTool(tool.id)}
-              >
-                {tool.icon}
-                <span>{tool.label}</span>
-              </button>
-            );
-          })}
+        <div
+          className="sim-tools-group"
+          role="group"
+          aria-label="Birleşik dalga araçları"
+        >
+          <button
+            type="button"
+            className={`sim-tool-btn is-cold ${
+              thermalTool === 'cold' ? 'is-active' : ''
+            }`}
+            aria-pressed={thermalTool === 'cold'}
+            onClick={() => onToggleThermal('cold')}
+          >
+            <Snowflake size={14} aria-hidden="true" />
+            <span>Soğuk Dalga</span>
+          </button>
+
+          <button
+            type="button"
+            className={`sim-tool-btn is-warm ${
+              thermalTool === 'warm' ? 'is-active' : ''
+            }`}
+            aria-pressed={thermalTool === 'warm'}
+            onClick={() => onToggleThermal('warm')}
+          >
+            <Flame size={14} aria-hidden="true" />
+            <span>Sıcak Dalga</span>
+          </button>
+
+          <button
+            type="button"
+            className={`sim-tool-btn is-moisture ${
+              moistureActive ? 'is-active' : ''
+            }`}
+            aria-pressed={moistureActive}
+            onClick={onToggleMoisture}
+            title="Soğuk veya sıcak dalgayla aynı anda göndermek için açın"
+          >
+            <CloudRain size={14} aria-hidden="true" />
+            <span>+ Nemli Kütle</span>
+          </button>
         </div>
 
-        <span className="sim-hint-pill">Haritaya tıklayarak dalga gönder</span>
+        <span className="sim-hint-pill">{comboHint}</span>
 
         <div className="sim-status-group" aria-live="polite">
           <span className="sim-status-badge">{waveCount} dalga</span>

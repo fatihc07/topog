@@ -77,7 +77,8 @@ export default function App() {
   const lastBoundsRef = useRef<ViewportBounds | null>(null);
 
   const [appMode, setAppMode] = useState<AppMode>('live');
-  const [simTool, setSimTool] = useState<SimWaveKind>('cold');
+  const [simThermal, setSimThermal] = useState<'cold' | 'warm' | null>('cold');
+  const [simMoisture, setSimMoisture] = useState(true);
   const [simIntensity, setSimIntensity] = useState(1.0);
   const [simWindDir, setSimWindDir] = useState<number | null>(90);
   const [simPlaying, setSimPlaying] = useState(true);
@@ -484,9 +485,38 @@ export default function App() {
     [syncWeatherForBounds, syncPeaksForBounds, weatherEnabled, peaksEnabled]
   );
 
+  const handleToggleSimThermal = useCallback(
+    (kind: 'cold' | 'warm') => {
+      setSimThermal((prev) => {
+        if (prev === kind) {
+          // Keep at least one tool active (if moisture is off, keep this thermal tool on)
+          return simMoisture ? null : kind;
+        }
+        return kind;
+      });
+    },
+    [simMoisture]
+  );
+
+  const handleToggleSimMoisture = useCallback(() => {
+    setSimMoisture((prev) => {
+      if (prev && simThermal === null) {
+        return true; // Ensure at least moisture or a thermal wave stays active
+      }
+      return !prev;
+    });
+  }, [simThermal]);
+
   const handleLaunchSimWave = useCallback(
     (lng: number, lat: number) => {
-      const wave = createSimWave(simTool, lng, lat, simIntensity);
+      const waveKind: SimWaveKind = simThermal ?? 'moisture';
+      const wave = createSimWave(
+        waveKind,
+        lng,
+        lat,
+        simIntensity,
+        simMoisture
+      );
       setSimWaves((prev) => {
         const nextWaves = [...prev.slice(-14), wave];
         const { fronts } = stepSimulation(nextWaves, 0.01, simWindDir, simSpeed);
@@ -495,7 +525,7 @@ export default function App() {
       });
       setSimPlaying(true);
     },
-    [simTool, simIntensity, simWindDir, simSpeed]
+    [simThermal, simMoisture, simIntensity, simWindDir, simSpeed]
   );
 
   const handleClearSimWaves = useCallback(() => {
@@ -855,6 +885,7 @@ export default function App() {
         appMode={appMode}
         simWaves={simWaves}
         simFronts={simFronts}
+        simSeason={simSeason}
         activeLayer={activeLayer}
         terrain3D={terrain3D}
         exaggeration={exaggeration}
@@ -942,7 +973,8 @@ export default function App() {
 
       {appMode === 'simulator' ? (
         <SimulatorDock
-          activeTool={simTool}
+          thermalTool={simThermal}
+          moistureActive={simMoisture}
           intensity={simIntensity}
           windDirDeg={simWindDir}
           playing={simPlaying}
@@ -950,7 +982,8 @@ export default function App() {
           season={simSeason}
           waveCount={simWaves.length}
           frontCount={simFronts.length}
-          onSelectTool={setSimTool}
+          onToggleThermal={handleToggleSimThermal}
+          onToggleMoisture={handleToggleSimMoisture}
           onChangeIntensity={setSimIntensity}
           onChangeWindDir={setSimWindDir}
           onTogglePlay={() => setSimPlaying((prev) => !prev)}

@@ -1,6 +1,6 @@
 # Topog — Dünya Fiziksel Haritası & Canlı Atmosfer Atlası
 
-**Aktif Sürüm:** `T 3.0` · **Sürüm Geçmişi:** [CHANGELOG.md](./CHANGELOG.md)
+**Aktif Sürüm:** `T 3.1` · **Sürüm Geçmişi:** [CHANGELOG.md](./CHANGELOG.md)
 
 Topog; tamamen ücretsiz, API anahtarı gerektirmeyen açık coğrafi ve meteorolojik veri kaynaklarıyla çalışan etkileşimli 2B/3B dünya fiziksel harita, canlı hava durumu, yağmur radarı ve uydu bulut örtüsü uygulamasıdır.
 
@@ -38,11 +38,11 @@ Topog; tamamen ücretsiz, API anahtarı gerektirmeyen açık coğrafi ve meteoro
 
 ### Hava Simülatörü (İzole Mod)
 - **Canlı Atlas | Hava Simülatörü Sekmeleri:** Canlı hava verileri ve 15 dk önbelleklerden tamamen izole edilmiş etkileşimli fizik simülasyonu.
-- **Dalga Araçları:** Haritaya tıklayarak **Soğuk Dalga (❄️)**, **Sıcak Dalga (🔥)** ve **Nemli Kütle (🌧️)** gönderme; rüzgar yönüne göre sürüklenme, deniz üzerinden nem toplama, dağ sıralarında orografik yağış/kar yoğunlaşması ve soğuk+sıcak çarpışmalarında cephe fırtınası oluşumu.
-- **Dinamik Şehir & Zirve Tepkisi:** Şehir sıcaklıkları, animasyonlu hava ikonları ve dağ zirvelerindeki kar kalınlığı/erimesi (`cm`) anlık hesaplanır.
+- **Dalga Araçları & Kombinasyonlar:** Haritaya tıklayarak **Soğuk Dalga (❄️)**, **Sıcak Dalga (🔥)** ve **+ Nemli Kütle (🌧️)** kombinasyonları (*Soğuk+Nemli, Sıcak+Nemli, Kuru Soğuk, Kuru Sıcak, Sadece Nemli*) gönderme; rüzgar yönüne göre sürüklenme, deniz üzerinden nem toplama, dağ sıralarında orografik yağış/kar yoğunlaşması ve soğuk+sıcak çarpışmalarında cephe fırtınası oluşumu.
+- **Sıcaklığa Duyarlı Kar/Yağmur & Zirve Tepkisi:** `<= 0°C` bölgelerde ve yüksek zirvelerde kar yağışı ile hızlı kar birikimi (`cm`), `> 0°C` bölgelerde yağmur oluşur; şehir sıcaklıkları ve animasyonlu hava ikonları anlık hesaplanır.
 
 ### Sürüm Takibi
-- Uygulama içi sol üstteki **`T 3.0`** rozetine tıklayarak tüm sürüm notlarını (*Eklenenler / Yapılanlar / Çıkarılanlar*) görüntüleyebilirsiniz.
+- Uygulama içi sol üstteki **`T 3.1`** rozetine tıklayarak tüm sürüm notlarını (*Eklenenler / Yapılanlar / Çıkarılanlar*) görüntüleyebilirsiniz.
 - Proje kuralları ve uzman alt ajan rehberi [`AGENTS.md`](./AGENTS.md) ve [`.agents/agents/`](./.agents/agents/) içinde tutulur.
 
 ---

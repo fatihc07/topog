@@ -7,6 +7,21 @@ Sürüm numaralandırma kuralı: **`T <Büyük>.<Küçük>`**
 
 ---
 
+## [T 3.1] — 2026-11-25
+**Simülatörde Soğuk/Sıcak + Nemli Kombinasyonu ve 0°C Kar/Yağmur Ayrımı**
+
+### Eklenenler
+- Simülatör araç çubuğunda **Soğuk Dalga / Sıcak Dalga** ile **+ Nemli Kütle** anahtarının aynı anda aktif edilebilmesi eklendi (`src/components/SimulatorDock.tsx`, `src/types/simulator.ts`, `src/App.tsx`): `Soğuk + Nemli`, `Sıcak + Nemli`, `Kuru Soğuk`, `Kuru Sıcak` veya `Sadece Nemli` tek tıkla gönderilebilir.
+- Sıcaklığa duyarlı `<= 0°C` Kar / `> 0°C` Yağmur ayrımı eklendi (`src/services/simulatorEngine.ts`, `src/components/MapCanvas.tsx`): Soğuk+nemli kütlenin `0°C` altına düşürdüğü yerlerde (ve yüksek dağ zirvelerinde) haritada kar bölgesi çizilip kar yağışı (`WMO 71/73`) tetiklenir ve dağlardaki kar kalınlığı (`cm`) artar; `0°C` üstünde kalan bölgelerde ise yağmur (`WMO 61/63`) oluşur.
+
+### Yapılanlar / İyileştirmeler
+- Kuru soğuk/sıcak dalgaların başlangıç nemi gerçekçi şekilde düşürülerek yalnızca `+ Nemli Kütle` seçiliyken veya denizden nem toplandığında yoğun yağış üretmesi sağlandı; dağ zirvesi kar birikimi hızlandırıldı.
+
+### Çıkarılanlar
+- Bu sürümde kaldırılan bir özellik yoktur.
+
+---
+
 ## [T 3.0] — 2026-11-25
 **Büyük Sürüm — Etkileşimli Hava Simülatörü**
 

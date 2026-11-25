@@ -156,19 +156,25 @@ export function createSimWave(
   kind: SimWaveKind,
   lng: number,
   lat: number,
-  strength = 1
+  strength = 1,
+  withMoisture = false
 ): SimWave {
   const clampedStrength = clamp(strength, 0.2, 2.5);
   const clampedLat = clamp(lat, -85, 85);
   const normLng = normalizeLng(lng);
-  const initialMoisture =
-    kind === 'moisture' ? 0.85 : kind === 'cold' ? 0.35 : 0.2;
+  const hasMoisture = kind === 'moisture' || withMoisture;
+  const initialMoisture = hasMoisture
+    ? 0.9
+    : kind === 'cold'
+      ? 0.22
+      : 0.14;
 
   waveCounter += 1;
 
   return {
     id: `sim-wave-${Date.now()}-${waveCounter}`,
     kind,
+    withMoisture: hasMoisture,
     lng: normLng,
     lat: clampedLat,
     originLng: normLng,
@@ -500,14 +506,14 @@ function resolveSimulatedWmoCode(
     return 95;
   }
 
-  if (effectiveWetness >= 0.56) {
-    if (tempC <= 1) {
-      return effectiveWetness >= 0.85 ? 73 : 71;
+  if (effectiveWetness >= 0.48) {
+    if (tempC <= 0) {
+      return effectiveWetness >= 0.82 ? 73 : 71;
     }
-    return effectiveWetness >= 0.85 ? 63 : 61;
+    return effectiveWetness >= 0.82 ? 63 : 61;
   }
 
-  if (effectiveWetness >= 0.34) return 3;
+  if (effectiveWetness >= 0.3) return 3;
   if (effectiveWetness >= 0.2) return 2;
   return 0;
 }
@@ -613,18 +619,22 @@ export function applySimulationToPeak(
   const prevSnowCm = weather?.snowDepthCm ?? 0;
   const dt = Math.max(0, dtSec);
   const isSnowing =
-    temperature <= 1 && (weatherCode === 71 || weatherCode === 73 || weatherCode === 95);
+    temperature <= 0 &&
+    (weatherCode === 71 || weatherCode === 73 || weatherCode === 95);
 
   let nextSnowCm = prevSnowCm;
   let snowfallCm = 0;
 
   if (isSnowing) {
-    const rateCmPerSec = weatherCode === 73 || weatherCode === 95 ? 1.4 : 0.75;
-    const added = rateCmPerSec * dt * (0.7 + sample.moistureScore * 0.6);
+    const rateCmPerSec = weatherCode === 73 || weatherCode === 95 ? 3.4 : 1.9;
+    const added =
+      rateCmPerSec *
+      dt *
+      (0.7 + sample.moistureScore * 0.65 + sample.oroScore * 0.5);
     nextSnowCm = round1(prevSnowCm + added);
     snowfallCm = round1(added);
-  } else if (temperature > 2 && prevSnowCm > 0) {
-    const meltCm = Math.min(prevSnowCm, (temperature - 2) * 0.25 * dt);
+  } else if (temperature > 1 && prevSnowCm > 0) {
+    const meltCm = Math.min(prevSnowCm, (temperature - 1) * 0.32 * dt);
     nextSnowCm = round1(Math.max(0, prevSnowCm - meltCm));
   }
 
@@ -732,7 +742,8 @@ function offsetCenter(
  */
 export function buildSimulatorGeoJson(
   waves: SimWave[],
-  fronts: SimFrontZone[]
+  fronts: SimFrontZone[],
+  season: SimSeason = 'winter'
 ): {
   wavesGeoJson: GeoJSON.FeatureCollection;
   cloudsGeoJson: GeoJSON.FeatureCollection;
@@ -741,6 +752,11 @@ export function buildSimulatorGeoJson(
   const waveFeatures: GeoJSON.Feature[] = [];
   const cloudFeatures: GeoJSON.Feature[] = [];
   const precipFeatures: GeoJSON.Feature[] = [];
+
+  const getLocalSimTemp = (lat: number, lng: number, elevM = 100): number => {
+    const sample = sampleFieldAtPoint(lat, lng, waves, fronts);
+    return getBaselineTemp(lat, elevM, season) + sample.tempDelta;
+  };
 
   for (let i = 0; i < waves.length; i += 1) {
     const w = waves[i];
@@ -803,34 +819,81 @@ export function buildSimulatorGeoJson(
       }
     }
 
-    // Precipitation zones from wet air masses or mountain-forced condensation
+    // Precipitation zones split by local simulated temperature: <= 0°C -> snow, > 0°C -> rain
     const precipIntensity = clamp(
       (w.moisture + w.orographicBoost * 0.45) * life,
       0,
       1.4
     );
     if (
-      (w.kind === 'moisture' && precipIntensity >= 0.45) ||
-      precipIntensity >= 0.72
+      w.withMoisture ||
+      w.moisture >= 0.46 ||
+      precipIntensity >= 0.65
     ) {
-      const isColdSnow =
-        w.kind === 'cold' ||
-        (Math.abs(w.lat) >= 48 && w.kind !== 'warm') ||
-        (w.orographicBoost >= 0.45 && Math.abs(w.lat) >= 34);
-      precipFeatures.push({
-        type: 'Feature',
-        properties: {
-          id: `${w.id}-precip`,
-          precipKind: isColdSnow ? 'snow' : 'rain',
-          opacity: round1(clamp(precipIntensity * 0.42, 0.14, 0.62)),
-        },
-        geometry: {
-          type: 'Polygon',
-          coordinates: [
-            buildGeodesicCircleRing(w.lng, w.lat, w.radiusKm * 0.56, 32),
-          ],
-        },
-      });
+      const subPatches = [
+        { bearing: 0, distFrac: 0, radFrac: 0.42, opMul: 1.0 },
+        { bearing: 0, distFrac: 0.42, radFrac: 0.36, opMul: 0.88 },
+        { bearing: 90, distFrac: 0.42, radFrac: 0.36, opMul: 0.88 },
+        { bearing: 180, distFrac: 0.42, radFrac: 0.36, opMul: 0.88 },
+        { bearing: 270, distFrac: 0.42, radFrac: 0.36, opMul: 0.88 },
+      ];
+
+      for (let s = 0; s < subPatches.length; s += 1) {
+        const p = subPatches[s];
+        const pt =
+          p.distFrac === 0
+            ? { lat: w.lat, lng: w.lng }
+            : offsetCenter(w.lat, w.lng, p.bearing, w.radiusKm * p.distFrac);
+        const localTemp = getLocalSimTemp(pt.lat, pt.lng, 120);
+        const precipKind: 'snow' | 'rain' = localTemp <= 0 ? 'snow' : 'rain';
+
+        precipFeatures.push({
+          type: 'Feature',
+          properties: {
+            id: `${w.id}-precip-${s}`,
+            precipKind,
+            opacity: round1(
+              clamp(precipIntensity * 0.38 * p.opMul, 0.14, 0.58)
+            ),
+          },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [
+              buildGeodesicCircleRing(
+                pt.lng,
+                pt.lat,
+                w.radiusKm * p.radFrac,
+                24
+              ),
+            ],
+          },
+        });
+      }
+
+      // Localized orographic snow caps over high peaks inside moist waves when summit <= 0°C
+      for (let m = 0; m < HIGH_PEAKS.length; m += 1) {
+        const peak = HIGH_PEAKS[m];
+        if (Math.abs(peak.lat - w.lat) > w.radiusKm / 100) continue;
+        const distKm = haversineKm(w.lat, w.lng, peak.lat, peak.lng);
+        if (distKm > w.radiusKm * 0.92) continue;
+        const summitTemp = getLocalSimTemp(peak.lat, peak.lng, peak.elevation);
+        if (summitTemp <= 0) {
+          precipFeatures.push({
+            type: 'Feature',
+            properties: {
+              id: `${w.id}-oro-snow-${m}`,
+              precipKind: 'snow',
+              opacity: round1(clamp(precipIntensity * 0.52, 0.25, 0.72)),
+            },
+            geometry: {
+              type: 'Polygon',
+              coordinates: [
+                buildGeodesicCircleRing(peak.lng, peak.lat, 55, 20),
+              ],
+            },
+          });
+        }
+      }
     }
   }
 
@@ -851,8 +914,9 @@ export function buildSimulatorGeoJson(
       },
     });
 
+    const frontTemp = getLocalSimTemp(f.lat, f.lng, 150);
     const precipKind: 'rain' | 'snow' | 'storm' =
-      f.intensity >= 0.58 ? 'storm' : f.isSnow ? 'snow' : 'rain';
+      f.intensity >= 0.58 ? 'storm' : frontTemp <= 0 || f.isSnow ? 'snow' : 'rain';
 
     precipFeatures.push({
       type: 'Feature',
