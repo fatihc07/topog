@@ -7,6 +7,21 @@ Sürüm numaralandırma kuralı: **`T <Büyük>.<Küçük>`**
 
 ---
 
+## [T 2.2] — 2026-11-25
+**Proje Kuralları ve Uzman Alt Ajan Sistemi**
+
+### Eklenenler
+- Proje içi 4 uzman alt ajan tanım dosyası eklendi (`.agents/agents/qa-verifier.md`, `.agents/agents/ui-visual-auditor.md`, `.agents/agents/gis-perf.md`, `.agents/agents/refactor-architect.md`).
+- Proje kuralları ve alt ajan kullanım rehberi (`AGENTS.md`) eklendi.
+
+### Yapılanlar / İyileştirmeler
+- Yayın öncesi kalite kapısı (`qa-verifier`), görsel UX denetimi (`ui-visual-auditor`), WebGL/bundle performansı (`gis-perf`) ve modüler refaktör (`refactor-architect`) standartlaştırıldı.
+
+### Çıkarılanlar
+- Bu sürümde kaldırılan bir özellik yoktur.
+
+---
+
 ## [T 2.1] — 2026-11-25
 **Arayüz Sadeleştirmesi — Drone Uçuş Modu Kaldırıldı**
 

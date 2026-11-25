@@ -7,9 +7,22 @@ export interface ReleaseEntry {
   removed: string[];
 }
 
-export const APP_VERSION = 'T 2.1';
+export const APP_VERSION = 'T 2.2';
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
+  {
+    version: 'T 2.2',
+    date: '2026-11-25',
+    title: 'Proje Kuralları ve Uzman Alt Ajan Sistemi',
+    added: [
+      'Proje içi 4 uzman alt ajan tanım dosyası eklendi (.agents/agents/qa-verifier.md, ui-visual-auditor.md, gis-perf.md, refactor-architect.md).',
+      'Proje kuralları ve alt ajan kullanım rehberi (AGENTS.md) eklendi.',
+    ],
+    changed: [
+      'Yayın öncesi kalite kapısı (qa-verifier), görsel UX denetimi (ui-visual-auditor), WebGL/bundle performansı (gis-perf) ve modüler refaktör (refactor-architect) standartlaştırıldı.',
+    ],
+    removed: [],
+  },
   {
     version: 'T 2.1',
     date: '2026-11-25',
