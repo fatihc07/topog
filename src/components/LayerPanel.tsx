@@ -10,7 +10,9 @@ import {
   Layers,
   Mountain,
   Sun,
+  Sunset,
   Trash2,
+  Video,
 } from 'lucide-react';
 import { BASE_LAYERS } from '../config/layers';
 import type { BaseLayerId } from '../types/map';
@@ -21,6 +23,8 @@ interface LayerPanelProps {
   exaggeration: number;
   hillshade: boolean;
   globeMode: boolean;
+  solarEnabled: boolean;
+  flyoverActive: boolean;
   weatherEnabled: boolean;
   weatherBadgeOpacity: number;
   weatherCacheCount: number;
@@ -35,6 +39,8 @@ interface LayerPanelProps {
   onChangeExaggeration: (value: number) => void;
   onToggleHillshade: () => void;
   onToggleGlobeMode: () => void;
+  onToggleSolar: () => void;
+  onToggleFlyover: () => void;
   onToggleWeather: () => void;
   onChangeWeatherBadgeOpacity: (value: number) => void;
   onClearWeatherCache: () => void;
@@ -51,6 +57,8 @@ export function LayerPanel({
   exaggeration,
   hillshade,
   globeMode,
+  solarEnabled,
+  flyoverActive,
   weatherEnabled,
   weatherBadgeOpacity,
   weatherCacheCount,
@@ -65,6 +73,8 @@ export function LayerPanel({
   onChangeExaggeration,
   onToggleHillshade,
   onToggleGlobeMode,
+  onToggleSolar,
+  onToggleFlyover,
   onToggleWeather,
   onChangeWeatherBadgeOpacity,
   onClearWeatherCache,
@@ -196,6 +206,44 @@ export function LayerPanel({
                 aria-checked={globeMode}
                 className={`switch-btn ${globeMode ? 'on' : ''}`}
                 onClick={onToggleGlobeMode}
+              >
+                <span className="switch-thumb" />
+              </button>
+            </div>
+
+            <div className="toggle-row">
+              <div className="toggle-label-group">
+                <Sunset size={16} color="#fbbf24" />
+                <div>
+                  <div className="toggle-label-title">Güneş &amp; Gece Sınırı</div>
+                  <div className="toggle-label-sub">Terminator ve dinamik dağ gölgesi</div>
+                </div>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={solarEnabled}
+                className={`switch-btn ${solarEnabled ? 'on' : ''}`}
+                onClick={onToggleSolar}
+              >
+                <span className="switch-thumb" />
+              </button>
+            </div>
+
+            <div className="toggle-row">
+              <div className="toggle-label-group">
+                <Video size={16} color="#38bdf8" />
+                <div>
+                  <div className="toggle-label-title">3B Drone Uçuşu</div>
+                  <div className="toggle-label-sub">Zirveler üzerinde sinematik yörünge</div>
+                </div>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={flyoverActive}
+                className={`switch-btn ${flyoverActive ? 'on' : ''}`}
+                onClick={onToggleFlyover}
               >
                 <span className="switch-thumb" />
               </button>

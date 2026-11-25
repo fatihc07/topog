@@ -7,9 +7,25 @@ export interface ReleaseEntry {
   removed: string[];
 }
 
-export const APP_VERSION = 'T 1.4';
+export const APP_VERSION = 'T 2.0';
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
+  {
+    version: 'T 2.0',
+    date: '2026-11-25',
+    title: 'Gece/Gündüz Sınırı & 3D Güneş Gölgesi, Canlı Deniz & Dalga Verisi, Sinematik 3D Drone Uçuşu',
+    added: [
+      'Gece/Gündüz Sınırı (Terminator) & 3D Güneş Gölgesi Simülatörü (src/services/solarService.ts, src/components/SolarTimeline.tsx, MapCanvas.tsx): Anlık gece-gündüz sınırı, 24 saatlik oynatılabilir zaman çizelgesi, Altın Saat/Gündüz/Gece fazı ve güneş azimutuna göre dinamik dağ gölge yönü (hillshade-illumination-direction).',
+      'Canlı Deniz Suyu Sıcaklığı & Dalga Yüksekliği (src/services/marineService.ts, src/components/MarineSection.tsx, InspectCard.tsx): Deniz ve kıyı noktalarına tıklandığında Open-Meteo Marine API üzerinden gerçek deniz suyu sıcaklığı (°C), dalga yüksekliği (m), dalga periyodu (sn) ve dalga yönü (15 dakikalık RAM + localStorage önbellekle; kara noktalarında uydurma veri üretilmez).',
+      'Sinematik 3D Drone Uçuş Modu (src/services/flyoverPresets.ts, src/components/FlyoverBar.tsx, MapCanvas.tsx): 6 ikonik manzara durağı ve haritadaki herhangi bir şehir, dağ veya noktadan başlatılabilen 3D arazi üzerinde otomatik yörünge uçuşu (0.5x/1x/2x hız ve 55°/65°/75° kamera açısı).',
+    ],
+    changed: [
+      'Katman paneline "Güneş & Gece Sınırı" ile "3B Drone Uçuşu" anahtarları eklendi (LayerPanel.tsx).',
+      'Nokta inceleme ve hava durumu detay kartlarına hızlı "Drone Uçuşu" başlatma düğmeleri eklendi (InspectCard.tsx, WeatherDetailCard.tsx).',
+      'Çoklu alt kontrol çubukları (Yağmur Radarı, Güneş Zaman Çizelgesi, Drone Uçuşu) .bottom-bars-stack kapsayıcısı ile çakışmasız hizalandı (App.tsx, index.css).',
+    ],
+    removed: [],
+  },
   {
     version: 'T 1.4',
     date: '2026-11-25',

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { RefreshCw, X } from 'lucide-react';
+import { RefreshCw, Video, X } from 'lucide-react';
 import { WEATHER_CACHE_TTL_MS } from '../services/weatherCache';
 import { getWeatherMeta } from '../services/weatherService';
 import type { WeatherData } from '../types/weather';
@@ -10,6 +10,7 @@ interface WeatherDetailCardProps {
   elevationMeters?: number;
   refreshing: boolean;
   onRefresh: (weather: WeatherData) => void;
+  onStartFlyover?: (lng: number, lat: number, name: string) => void;
   onClose: () => void;
 }
 
@@ -18,6 +19,7 @@ export function WeatherDetailCard({
   elevationMeters,
   refreshing,
   onRefresh,
+  onStartFlyover,
   onClose,
 }: WeatherDetailCardProps) {
   const [now, setNow] = useState(() => Date.now());
@@ -140,6 +142,18 @@ export function WeatherDetailCard({
           <RefreshCw size={14} className={refreshing ? 'spin' : undefined} />
           <span>{refreshing ? 'Güncelleniyor...' : 'Şimdi Yenile'}</span>
         </button>
+        {onStartFlyover && (
+          <button
+            type="button"
+            className="btn-accent"
+            onClick={() =>
+              onStartFlyover(weather.lng, weather.lat, weather.cityName)
+            }
+          >
+            <Video size={14} />
+            <span>3D Uçuş</span>
+          </button>
+        )}
       </div>
     </div>
   );

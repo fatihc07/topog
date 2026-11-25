@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FlyoverBar } from './components/FlyoverBar';
 import { InspectCard } from './components/InspectCard';
 import { LayerPanel } from './components/LayerPanel';
 import { MapCanvas, type MapCanvasHandle } from './components/MapCanvas';
@@ -6,6 +7,7 @@ import { MapControls } from './components/MapControls';
 import { RadarTimeline } from './components/RadarTimeline';
 import { ReleaseNotesModal } from './components/ReleaseNotesModal';
 import { SearchBar } from './components/SearchBar';
+import { SolarTimeline } from './components/SolarTimeline';
 import { TelemetryBar } from './components/TelemetryBar';
 import { WeatherDetailCard } from './components/WeatherDetailCard';
 import {
@@ -13,7 +15,9 @@ import {
   getVisibleCities,
   hasCityNearPoint,
 } from './services/cityIndex';
+import { FLYOVER_PRESETS, type FlyoverPreset } from './services/flyoverPresets';
 import { fetchElevation, reverseGeocode } from './services/geocoding';
+import { clearMarineCache, fetchMarineData } from './services/marineService';
 import {
   PEAKS_MIN_ZOOM,
   fetchOverpassPeaks,
@@ -23,6 +27,7 @@ import {
   selectNonOverlappingPeaks,
 } from './services/peakService';
 import { fetchRainViewerFrames } from './services/radarService';
+import { getSunPositionForPoint } from './services/solarService';
 import {
   clearWeatherCache,
   getWeatherCacheCount,
@@ -73,6 +78,19 @@ export default function App() {
   const [cloudsEnabled, setCloudsEnabled] = useState(false);
   const [cloudsOpacity, setCloudsOpacity] = useState(0.8);
 
+  const [solarEnabled, setSolarEnabled] = useState(false);
+  const [solarMinutes, setSolarMinutes] = useState(() => {
+    const now = new Date();
+    return now.getHours() * 60 + now.getMinutes();
+  });
+  const [solarPlaying, setSolarPlaying] = useState(false);
+
+  const [flyoverActive, setFlyoverActive] = useState(false);
+  const [flyoverPlaying, setFlyoverPlaying] = useState(true);
+  const [flyoverSpeed, setFlyoverSpeed] = useState(1);
+  const [flyoverPitch, setFlyoverPitch] = useState(62);
+  const [flyoverName, setFlyoverName] = useState(FLYOVER_PRESETS[0].name);
+
   const [weatherEnabled, setWeatherEnabled] = useState(true);
   const [weatherBadgeOpacity, setWeatherBadgeOpacity] = useState(0.92);
   const [weatherItems, setWeatherItems] = useState<WeatherData[]>([]);
@@ -109,6 +127,31 @@ export default function App() {
   );
   const [flyTarget, setFlyTarget] = useState<FlyTarget | null>(null);
   const [releaseNotesOpen, setReleaseNotesOpen] = useState(false);
+
+  // Solar date & sun position for active viewport center
+  const solarDateMs = useMemo(() => {
+    const d = new Date();
+    d.setHours(Math.floor(solarMinutes / 60), solarMinutes % 60, 0, 0);
+    return d.getTime();
+  }, [solarMinutes]);
+
+  const sunPosition = useMemo(() => {
+    const lat = lastBoundsRef.current?.centerLat ?? 39.0;
+    const lng = lastBoundsRef.current?.centerLng ?? 35.2;
+    return getSunPositionForPoint(new Date(solarDateMs), lat, lng);
+  }, [solarDateMs]);
+
+  useEffect(() => {
+    if (!solarEnabled) {
+      setSolarPlaying(false);
+      return;
+    }
+    if (!solarPlaying) return;
+    const id = window.setInterval(() => {
+      setSolarMinutes((prev) => (prev + 10) % 1440);
+    }, 180);
+    return () => window.clearInterval(id);
+  }, [solarEnabled, solarPlaying]);
 
   // Fetch RainViewer frames when Rain Radar is enabled + refresh every 10 min
   useEffect(() => {
@@ -346,15 +389,17 @@ export default function App() {
         lat,
         elevation: null,
         placeName: presetPlaceName ?? null,
+        marine: null,
         loading: true,
       });
 
       try {
-        const [placeName, elevation] = await Promise.all([
+        const [placeName, elevation, marine] = await Promise.all([
           presetPlaceName
             ? Promise.resolve(presetPlaceName)
             : reverseGeocode(lat, lng, controller.signal),
           fetchElevation(lat, lng, controller.signal),
+          fetchMarineData(lat, lng, controller.signal),
         ]);
 
         if (controller.signal.aborted) return;
@@ -363,6 +408,7 @@ export default function App() {
           lat,
           elevation,
           placeName: placeName ?? 'Seçili Coğrafi Nokta',
+          marine,
           loading: false,
         });
       } catch (err) {
@@ -372,6 +418,7 @@ export default function App() {
           lat,
           elevation: null,
           placeName: presetPlaceName ?? 'Seçili Coğrafi Nokta',
+          marine: null,
           loading: false,
         });
       }
@@ -457,6 +504,7 @@ export default function App() {
 
   const handleClearWeatherCache = useCallback(() => {
     clearWeatherCache();
+    clearMarineCache();
     setWeatherCacheCount(0);
     if (lastBoundsRef.current) {
       if (weatherEnabled) {
@@ -467,6 +515,57 @@ export default function App() {
       }
     }
   }, [syncWeatherForBounds, syncPeaksForBounds, weatherEnabled, peaksEnabled]);
+
+  const startFlyoverAt = useCallback(
+    (lng: number, lat: number, name: string, zoom = 11.8, pitch = 62) => {
+      if (!terrain3D) setTerrain3D(true);
+      setFlyoverName(name);
+      setFlyoverPitch(pitch);
+      setFlyoverPlaying(true);
+      setFlyoverActive(true);
+      setFlyTarget({
+        lng,
+        lat,
+        zoom,
+        pitch,
+        bearing: 0,
+        timestamp: Date.now(),
+      });
+    },
+    [terrain3D]
+  );
+
+  const handleSelectFlyoverPreset = useCallback(
+    (preset: FlyoverPreset) => {
+      setFlyoverSpeed(preset.speed);
+      startFlyoverAt(
+        preset.lng,
+        preset.lat,
+        preset.name,
+        preset.zoom,
+        preset.pitch
+      );
+    },
+    [startFlyoverAt]
+  );
+
+  const handleToggleFlyover = useCallback(() => {
+    if (flyoverActive) {
+      setFlyoverActive(false);
+    } else {
+      handleSelectFlyoverPreset(FLYOVER_PRESETS[0]);
+    }
+  }, [flyoverActive, handleSelectFlyoverPreset]);
+
+  const handleToggleSolar = useCallback(() => {
+    setSolarEnabled((prev) => {
+      const next = !prev;
+      if (next && !hillshade) {
+        setHillshade(true);
+      }
+      return next;
+    });
+  }, [hillshade]);
 
   const handleSelectLandmark = useCallback(
     (landmark: LandmarkPreset) => {
@@ -537,6 +636,14 @@ export default function App() {
         exaggeration={exaggeration}
         hillshade={hillshade}
         globeMode={globeMode}
+        solarEnabled={solarEnabled}
+        solarDateMs={solarDateMs}
+        sunAzimuthDeg={sunPosition.azimuthDeg}
+        sunElevationDeg={sunPosition.elevationDeg}
+        flyoverActive={flyoverActive}
+        flyoverPlaying={flyoverPlaying}
+        flyoverSpeed={flyoverSpeed}
+        flyoverPitch={flyoverPitch}
         cloudsEnabled={cloudsEnabled}
         cloudsOpacity={cloudsOpacity}
         rainEnabled={rainEnabled}
@@ -573,6 +680,8 @@ export default function App() {
         exaggeration={exaggeration}
         hillshade={hillshade}
         globeMode={globeMode}
+        solarEnabled={solarEnabled}
+        flyoverActive={flyoverActive}
         weatherEnabled={weatherEnabled}
         weatherBadgeOpacity={weatherBadgeOpacity}
         weatherCacheCount={weatherCacheCount}
@@ -587,6 +696,8 @@ export default function App() {
         onChangeExaggeration={setExaggeration}
         onToggleHillshade={() => setHillshade((prev) => !prev)}
         onToggleGlobeMode={() => setGlobeMode((prev) => !prev)}
+        onToggleSolar={handleToggleSolar}
+        onToggleFlyover={handleToggleFlyover}
         onToggleWeather={() => setWeatherEnabled((prev) => !prev)}
         onChangeWeatherBadgeOpacity={setWeatherBadgeOpacity}
         onClearWeatherCache={handleClearWeatherCache}
@@ -604,18 +715,56 @@ export default function App() {
         onGeolocate={() => mapHandleRef.current?.geolocate()}
       />
 
-      {rainEnabled && (
-        <RadarTimeline
-          frames={radarFrames}
-          activeIndex={radarIndex}
-          playing={radarPlaying}
-          loading={rainLoading}
-          onTogglePlay={() => setRadarPlaying((prev) => !prev)}
-          onSelectIndex={(idx) => {
-            setRadarPlaying(false);
-            setRadarIndex(idx);
-          }}
-        />
+      {(rainEnabled || solarEnabled || flyoverActive) && (
+        <div className="bottom-bars-stack">
+          {flyoverActive && (
+            <FlyoverBar
+              activeName={flyoverName}
+              playing={flyoverPlaying}
+              speed={flyoverSpeed}
+              pitch={flyoverPitch}
+              onTogglePlay={() => setFlyoverPlaying((prev) => !prev)}
+              onChangeSpeed={setFlyoverSpeed}
+              onChangePitch={setFlyoverPitch}
+              onSelectPreset={handleSelectFlyoverPreset}
+              onClose={() => setFlyoverActive(false)}
+            />
+          )}
+
+          {solarEnabled && (
+            <SolarTimeline
+              minutesOfDay={solarMinutes}
+              playing={solarPlaying}
+              sunElevationDeg={sunPosition.elevationDeg}
+              sunAzimuthDeg={sunPosition.azimuthDeg}
+              onTogglePlay={() => setSolarPlaying((prev) => !prev)}
+              onChangeMinutes={(min) => {
+                setSolarPlaying(false);
+                setSolarMinutes(min);
+              }}
+              onResetNow={() => {
+                setSolarPlaying(false);
+                const now = new Date();
+                setSolarMinutes(now.getHours() * 60 + now.getMinutes());
+              }}
+              onClose={() => setSolarEnabled(false)}
+            />
+          )}
+
+          {rainEnabled && (
+            <RadarTimeline
+              frames={radarFrames}
+              activeIndex={radarIndex}
+              playing={radarPlaying}
+              loading={rainLoading}
+              onTogglePlay={() => setRadarPlaying((prev) => !prev)}
+              onSelectIndex={(idx) => {
+                setRadarPlaying(false);
+                setRadarIndex(idx);
+              }}
+            />
+          )}
+        </div>
       )}
 
       {selectedPeak?.weather ? (
@@ -624,6 +773,9 @@ export default function App() {
           elevationMeters={selectedPeak.peak.elevation}
           refreshing={refreshingCity}
           onRefresh={(w) => void handleRefreshCityWeather(w)}
+          onStartFlyover={(lng, lat, name) =>
+            startFlyoverAt(lng, lat, name, 12.0, 64)
+          }
           onClose={() => setSelectedPeak(null)}
         />
       ) : selectedWeather ? (
@@ -631,12 +783,18 @@ export default function App() {
           weather={selectedWeather}
           refreshing={refreshingCity}
           onRefresh={(w) => void handleRefreshCityWeather(w)}
+          onStartFlyover={(lng, lat, name) =>
+            startFlyoverAt(lng, lat, name, 12.0, 60)
+          }
           onClose={() => setSelectedWeather(null)}
         />
       ) : inspectedPoint ? (
         <InspectCard
           point={inspectedPoint}
           onZoom3D={handleZoom3D}
+          onStartFlyover={(lng, lat, name) =>
+            startFlyoverAt(lng, lat, name, 12.0, 62)
+          }
           onClose={() => {
             inspectAbortRef.current?.abort();
             setInspectedPoint(null);

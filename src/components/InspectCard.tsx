@@ -1,9 +1,11 @@
-import { Loader2, MapPin, Mountain, X } from 'lucide-react';
+import { Loader2, MapPin, Mountain, Video, X } from 'lucide-react';
 import type { InspectedPoint } from '../types/map';
+import { MarineSection } from './MarineSection';
 
 interface InspectCardProps {
   point: InspectedPoint;
   onZoom3D: (lng: number, lat: number) => void;
+  onStartFlyover?: (lng: number, lat: number, name: string) => void;
   onClose: () => void;
 }
 
@@ -12,7 +14,12 @@ function formatCoord(value: number, posLabel: string, negLabel: string): string 
   return `${Math.abs(value).toFixed(4)}° ${dir}`;
 }
 
-export function InspectCard({ point, onZoom3D, onClose }: InspectCardProps) {
+export function InspectCard({
+  point,
+  onZoom3D,
+  onStartFlyover,
+  onClose,
+}: InspectCardProps) {
   const latStr = formatCoord(point.lat, 'K', 'G');
   const lngStr = formatCoord(point.lng, 'D', 'B');
 
@@ -66,6 +73,8 @@ export function InspectCard({ point, onZoom3D, onClose }: InspectCardProps) {
         </div>
       </div>
 
+      {point.marine ? <MarineSection marine={point.marine} /> : null}
+
       <div className="inspect-actions">
         <button
           type="button"
@@ -75,6 +84,22 @@ export function InspectCard({ point, onZoom3D, onClose }: InspectCardProps) {
           <Mountain size={14} />
           <span>3D Yakınlaş</span>
         </button>
+        {onStartFlyover && (
+          <button
+            type="button"
+            className="btn-accent"
+            onClick={() =>
+              onStartFlyover(
+                point.lng,
+                point.lat,
+                point.placeName || 'Seçili Nokta'
+              )
+            }
+          >
+            <Video size={14} />
+            <span>Drone Uçuşu</span>
+          </button>
+        )}
       </div>
     </div>
   );

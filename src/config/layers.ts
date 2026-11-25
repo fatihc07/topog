@@ -223,6 +223,39 @@ export function buildInitialStyle(defaultLayer: BaseLayerId): StyleSpecification
     },
   });
 
+  sources['solar-night'] = {
+    type: 'geojson',
+    data: { type: 'FeatureCollection', features: [] },
+  };
+
+  layers.push({
+    id: 'solar-night-fill',
+    type: 'fill',
+    source: 'solar-night',
+    layout: { visibility: 'none' },
+    paint: {
+      'fill-color': '#050b16',
+      'fill-opacity': 0.56,
+    },
+  });
+
+  sources['solar-terminator'] = {
+    type: 'geojson',
+    data: { type: 'FeatureCollection', features: [] },
+  };
+
+  layers.push({
+    id: 'solar-terminator-line',
+    type: 'line',
+    source: 'solar-terminator',
+    layout: { visibility: 'none' },
+    paint: {
+      'line-color': '#fbbf24',
+      'line-width': 1.8,
+      'line-opacity': 0.72,
+    },
+  });
+
   sources['source-clouds-live'] = {
     type: 'raster',
     tiles: REALTIME_CLOUDS_TILES,

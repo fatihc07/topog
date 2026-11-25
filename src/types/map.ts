@@ -1,3 +1,5 @@
+import type { MarineData } from '../services/marineService';
+
 export type BaseLayerId =
   | 'opentopomap'
   | 'esri-physical'
@@ -51,6 +53,7 @@ export interface InspectedPoint {
   lat: number;
   elevation: number | null;
   placeName: string | null;
+  marine?: MarineData | null;
   loading: boolean;
 }
 

@@ -3,6 +3,7 @@ import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { BASE_LAYERS, buildInitialStyle } from '../config/layers';
 import { registerCloudProtocol } from '../services/cloudProtocol';
+import { buildNightPolygonGeoJson } from '../services/solarService';
 import { getWeatherMeta } from '../services/weatherService';
 import type { BaseLayerId, FlyTarget, TelemetryState } from '../types/map';
 import type {
@@ -26,6 +27,14 @@ interface MapCanvasProps {
   exaggeration: number;
   hillshade: boolean;
   globeMode: boolean;
+  solarEnabled: boolean;
+  solarDateMs: number;
+  sunAzimuthDeg: number;
+  sunElevationDeg: number;
+  flyoverActive: boolean;
+  flyoverPlaying: boolean;
+  flyoverSpeed: number;
+  flyoverPitch: number;
   cloudsEnabled: boolean;
   cloudsOpacity: number;
   rainEnabled: boolean;
@@ -54,6 +63,14 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
       exaggeration,
       hillshade,
       globeMode,
+      solarEnabled,
+      solarDateMs,
+      sunAzimuthDeg,
+      sunElevationDeg,
+      flyoverActive,
+      flyoverPlaying,
+      flyoverSpeed,
+      flyoverPitch,
       cloudsEnabled,
       cloudsOpacity,
       rainEnabled,
@@ -285,7 +302,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
       }
     }, [terrain3D, exaggeration]);
 
-    // Sync Hillshade overlay
+    // Sync Hillshade overlay & Solar azimuth illumination
     useEffect(() => {
       const map = mapRef.current;
       if (!map || !isLoadedRef.current) return;
@@ -295,8 +312,75 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
           'visibility',
           hillshade ? 'visible' : 'none'
         );
+        const dir = solarEnabled
+          ? Math.round(((sunAzimuthDeg % 360) + 360) % 360)
+          : 315;
+        const exag = solarEnabled
+          ? sunElevationDeg < 0
+            ? 0.25
+            : Math.min(0.85, 0.35 + (1 - Math.min(1, sunElevationDeg / 65)) * 0.45)
+          : 0.55;
+        map.setPaintProperty(
+          'hillshade-overlay',
+          'hillshade-illumination-direction',
+          dir
+        );
+        map.setPaintProperty('hillshade-overlay', 'hillshade-exaggeration', exag);
       }
-    }, [hillshade]);
+    }, [hillshade, solarEnabled, sunAzimuthDeg, sunElevationDeg]);
+
+    // Sync Solar Day/Night Terminator overlay
+    useEffect(() => {
+      const map = mapRef.current;
+      if (!map || !isLoadedRef.current) return;
+
+      const vis = solarEnabled ? 'visible' : 'none';
+      if (map.getLayer('solar-night-fill')) {
+        map.setLayoutProperty('solar-night-fill', 'visibility', vis);
+      }
+      if (map.getLayer('solar-terminator-line')) {
+        map.setLayoutProperty('solar-terminator-line', 'visibility', vis);
+      }
+
+      if (!solarEnabled) return;
+      const { nightPolygon, terminatorLine } = buildNightPolygonGeoJson(
+        new Date(solarDateMs)
+      );
+      const nightSource = map.getSource('solar-night') as
+        | maplibregl.GeoJSONSource
+        | undefined;
+      const lineSource = map.getSource('solar-terminator') as
+        | maplibregl.GeoJSONSource
+        | undefined;
+      nightSource?.setData(nightPolygon);
+      lineSource?.setData(terminatorLine);
+    }, [solarEnabled, solarDateMs]);
+
+    // Sync Cinematic 3D Drone Flyover orbit
+    useEffect(() => {
+      const map = mapRef.current;
+      if (!map || !flyoverActive) return;
+
+      if (Math.abs(map.getPitch() - flyoverPitch) > 2) {
+        map.easeTo({ pitch: flyoverPitch, duration: 500 });
+      }
+
+      if (!flyoverPlaying) return;
+
+      let rafId = 0;
+      let lastTime = performance.now();
+
+      const step = (now: number) => {
+        const dt = Math.min(0.1, (now - lastTime) / 1000);
+        lastTime = now;
+        const currentBearing = map.getBearing();
+        map.setBearing((currentBearing + dt * 14 * flyoverSpeed) % 360);
+        rafId = requestAnimationFrame(step);
+      };
+
+      rafId = requestAnimationFrame(step);
+      return () => cancelAnimationFrame(rafId);
+    }, [flyoverActive, flyoverPlaying, flyoverSpeed, flyoverPitch]);
 
     // Sync Globe / Mercator projection
     useEffect(() => {

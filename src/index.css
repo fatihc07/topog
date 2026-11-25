@@ -1485,3 +1485,352 @@ body,
 .inspect-stat-value.snow {
   color: #bae6fd;
 }
+
+/* Solar Terminator & Sun Shadow Simulator Bar */
+.solar-timeline {
+  position: absolute;
+  bottom: 48px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 18;
+  width: min(540px, calc(100vw - 32px));
+  padding: 9px 13px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.solar-play-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid rgba(251, 191, 36, 0.55);
+  background: rgba(251, 191, 36, 0.16);
+  color: var(--accent-amber);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.solar-play-btn:hover {
+  background: rgba(251, 191, 36, 0.3);
+  transform: scale(1.05);
+}
+
+.solar-track-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.solar-track-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.solar-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--accent-amber);
+}
+
+.solar-time-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.solar-time-mono {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.solar-phase-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 999px;
+}
+
+.solar-phase-badge.is-day {
+  background: rgba(251, 191, 36, 0.18);
+  color: var(--accent-amber);
+}
+
+.solar-phase-badge.is-golden {
+  background: rgba(251, 146, 60, 0.22);
+  color: #fdba74;
+}
+
+.solar-phase-badge.is-night {
+  background: rgba(56, 189, 248, 0.16);
+  color: var(--accent);
+}
+
+.solar-sun-readout {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-secondary);
+}
+
+.solar-scrubber {
+  margin: 0;
+}
+
+.solar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.solar-reset-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border-glass);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.solar-reset-btn:hover {
+  background: var(--bg-surface-hover);
+}
+
+/* 3D Drone Flyover Bar */
+.flyover-bar {
+  position: absolute;
+  bottom: 48px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 19;
+  width: min(680px, calc(100vw - 32px));
+  padding: 10px 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.flyover-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.flyover-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.flyover-icon-badge {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: rgba(56, 189, 248, 0.16);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.flyover-title-group {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.flyover-kicker {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+
+.flyover-active-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 170px;
+}
+
+.flyover-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.flyover-play-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border-radius: 9px;
+  border: 1px solid rgba(56, 189, 248, 0.5);
+  background: rgba(56, 189, 248, 0.18);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.flyover-play-btn:hover {
+  background: rgba(56, 189, 248, 0.3);
+}
+
+.flyover-pill-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 9px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-glass);
+}
+
+.flyover-pill-label {
+  font-size: 10.5px;
+  color: var(--text-secondary);
+  padding: 0 5px;
+}
+
+.flyover-pill {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.flyover-pill.is-active {
+  background: rgba(56, 189, 248, 0.24);
+  color: var(--text-primary);
+}
+
+.flyover-close-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 9px;
+  border-radius: 9px;
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  background: rgba(248, 113, 113, 0.14);
+  color: #fecaca;
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.flyover-close-btn:hover {
+  background: rgba(248, 113, 113, 0.26);
+}
+
+.flyover-presets-scroll {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.flyover-presets-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.flyover-preset-pill {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-glass);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.flyover-preset-pill:hover,
+.flyover-preset-pill.is-active {
+  border-color: var(--border-active);
+  background: rgba(56, 189, 248, 0.16);
+}
+
+.flyover-preset-name {
+  font-weight: 600;
+}
+
+.flyover-preset-sub {
+  font-size: 10.5px;
+  color: var(--text-secondary);
+}
+
+/* Stacked bottom bars when multiple overlays are active */
+.bottom-bars-stack {
+  position: absolute;
+  bottom: 48px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 18;
+  width: min(680px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.bottom-bars-stack > * {
+  position: static !important;
+  transform: none !important;
+  pointer-events: auto;
+}
+
+@media (max-width: 720px) {
+  .solar-sun-readout {
+    display: none;
+  }
+
+  .bottom-bars-stack {
+    bottom: 44px;
+  }
+}
