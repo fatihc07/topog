@@ -7,6 +7,22 @@ Sürüm numaralandırma kuralı: **`T <Büyük>.<Küçük>`**
 
 ---
 
+## [T 4.1] — 2026-11-25
+**Ülke Modu — Etkileşimli Ülke Sınırları, Parlak Vurgu ve Bayraklı Türkçe Ülke Kartı**
+
+### Eklenenler
+- Katman panelinin (*Harita Katmanları & Arazi*) son sırasına **Ülke Modu** anahtarı eklendi (`src/components/LayerPanel.tsx`, `src/App.tsx`).
+- Natural Earth `ne_50m_admin_0_countries` tabanlı optimize edilmiş yerel sınır verisi (`public/data/countries.geojson`: 242 ülke/bölge, sayısal `feature.id`, Türkçe ülke adları, kıta bilgisi ve ISO kodu) ve tembel/önbellekli yükleme servisi (`src/services/countryService.ts`) eklendi.
+- Harita üzerinde fareyle bir ülkenin üzerine gelindiğinde MapLibre `feature-state` ile sınırların parlak cam mavisi çizilmesi (`countries-fill`, `countries-outline-glow`, `countries-outline` — `src/config/layers.ts`, `src/components/MapCanvas.tsx`) ve imleç yanında bayraklı Türkçe ülke adı/kıta kartı gösterilmesi eklendi (`src/index.css`).
+
+### Yapılanlar / İyileştirmeler
+- `qa-verifier` kontrolleri sonrası `countryLoading` hızlı aç-kapa durumu, `countriesLoadedRef` cleanup ve tooltip sağ kenar kırpma payı giderildi.
+
+### Çıkarılanlar
+- Bu sürümde kaldırılan bir özellik yoktur.
+
+---
+
 ## [T 4.0] — 2026-11-25
 **Büyük Sürüm — Simülatör Modu 2.0**
 

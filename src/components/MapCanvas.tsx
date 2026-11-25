@@ -1,6 +1,7 @@
 import {
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useRef,
   useState,
   forwardRef,
@@ -9,6 +10,11 @@ import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { BASE_LAYERS, buildInitialStyle } from '../config/layers';
 import { registerCloudProtocol } from '../services/cloudProtocol';
+import {
+  isoToFlagEmoji,
+  loadCountriesGeoJson,
+  type CountryHoverInfo,
+} from '../services/countryService';
 import { buildNightPolygonGeoJson } from '../services/solarService';
 import { getWeatherMeta } from '../services/weatherService';
 import type { BaseLayerId, FlyTarget, TelemetryState } from '../types/map';
@@ -70,6 +76,8 @@ interface MapCanvasProps {
   onSelectWeather: (item: WeatherData) => void;
   onSelectPeak: (item: PeakDisplayItem) => void;
   onLaunchSimWave: (lng: number, lat: number) => void;
+  countryMode: boolean;
+  onCountryLoadingChange?: (loading: boolean) => void;
 }
 
 export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
@@ -110,6 +118,8 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
       onSelectWeather,
       onSelectPeak,
       onLaunchSimWave,
+      countryMode,
+      onCountryLoadingChange,
     },
     ref
   ) {
@@ -123,21 +133,67 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
     const isLoadedRef = useRef(false);
     const terrainRef = useRef(terrain3D);
     const appModeRef = useRef(appMode);
+    const countryModeRef = useRef(countryMode);
+    const countriesLoadedRef = useRef(false);
+    const hoveredCountryIdRef = useRef<number | null>(null);
+    const countryTooltipRef = useRef<HTMLDivElement | null>(null);
+    const tooltipPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+    const [hoveredCountry, setHoveredCountry] =
+      useState<CountryHoverInfo | null>(null);
     const onTelemetryRef = useRef(onTelemetryChange);
     const onInspectRef = useRef(onInspectPoint);
     const onViewportRef = useRef(onViewportChange);
     const onSelectWeatherRef = useRef(onSelectWeather);
     const onSelectPeakRef = useRef(onSelectPeak);
     const onLaunchSimWaveRef = useRef(onLaunchSimWave);
+    const onCountryLoadingRef = useRef(onCountryLoadingChange);
 
     terrainRef.current = terrain3D;
     appModeRef.current = appMode;
+    countryModeRef.current = countryMode;
     onTelemetryRef.current = onTelemetryChange;
     onInspectRef.current = onInspectPoint;
     onViewportRef.current = onViewportChange;
     onSelectWeatherRef.current = onSelectWeather;
     onSelectPeakRef.current = onSelectPeak;
     onLaunchSimWaveRef.current = onLaunchSimWave;
+    onCountryLoadingRef.current = onCountryLoadingChange;
+
+    const clearCountryHover = () => {
+      const map = mapRef.current;
+      if (
+        map &&
+        hoveredCountryIdRef.current !== null &&
+        map.getSource('countries-source')
+      ) {
+        map.setFeatureState(
+          { source: 'countries-source', id: hoveredCountryIdRef.current },
+          { hover: false }
+        );
+      }
+      hoveredCountryIdRef.current = null;
+      setHoveredCountry(null);
+    };
+
+    const positionCountryTooltip = (x: number, y: number) => {
+      tooltipPosRef.current = { x, y };
+      const el = countryTooltipRef.current;
+      const container = containerRef.current;
+      if (!el || !container) return;
+      const cw = container.clientWidth || window.innerWidth;
+      const tx = Math.min(Math.max(12, x + 16), Math.max(12, cw - 252));
+      const ty = y > 68 ? y - 54 : y + 18;
+      el.style.transform = `translate3d(${Math.round(tx)}px, ${Math.round(ty)}px, 0)`;
+    };
+
+    useLayoutEffect(() => {
+      if (hoveredCountry) {
+        positionCountryTooltip(
+          tooltipPosRef.current.x,
+          tooltipPosRef.current.y
+        );
+      }
+    }, [hoveredCountry]);
 
     useImperativeHandle(ref, () => ({
       zoomIn: () => {
@@ -261,7 +317,65 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
       map.on('mousemove', (e) => {
         lastCursor = { lng: e.lngLat.lng, lat: e.lngLat.lat };
         scheduleTelemetry();
+
+        if (
+          countryModeRef.current &&
+          countriesLoadedRef.current &&
+          map.getLayer('countries-fill')
+        ) {
+          const features = map.queryRenderedFeatures(e.point, {
+            layers: ['countries-fill'],
+          });
+          const top = features[0];
+          if (top && typeof top.id === 'number') {
+            positionCountryTooltip(e.point.x, e.point.y);
+            if (hoveredCountryIdRef.current !== top.id) {
+              clearCountryHover();
+              map.setFeatureState(
+                { source: 'countries-source', id: top.id },
+                { hover: true }
+              );
+              hoveredCountryIdRef.current = top.id;
+              const props = (top.properties ?? {}) as Record<string, unknown>;
+              const iso = typeof props.iso === 'string' ? props.iso : '';
+              const nameTr =
+                typeof props.nameTr === 'string' ? props.nameTr : '';
+              const nameEn =
+                typeof props.nameEn === 'string' ? props.nameEn : '';
+              const continent =
+                typeof props.continent === 'string' ? props.continent : '';
+              setHoveredCountry({
+                id: top.id,
+                iso,
+                nameTr,
+                nameEn,
+                continent,
+                flag: isoToFlagEmoji(iso),
+              });
+            }
+            if (appModeRef.current !== 'simulator') {
+              map.getCanvas().style.cursor = 'pointer';
+            }
+          } else {
+            if (hoveredCountryIdRef.current !== null) {
+              clearCountryHover();
+            }
+            map.getCanvas().style.cursor =
+              appModeRef.current === 'simulator' ? 'crosshair' : '';
+          }
+        }
       });
+
+      const handleCanvasMouseLeave = () => {
+        if (hoveredCountryIdRef.current !== null) {
+          clearCountryHover();
+        }
+        map.getCanvas().style.cursor =
+          appModeRef.current === 'simulator' ? 'crosshair' : '';
+      };
+
+      const canvasEl = map.getCanvas();
+      canvasEl.addEventListener('mouseleave', handleCanvasMouseLeave);
 
       map.on('move', () => {
         scheduleTelemetry();
@@ -282,7 +396,10 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
       mapRef.current = map;
 
       return () => {
+        canvasEl.removeEventListener('mouseleave', handleCanvasMouseLeave);
         if (rafId !== null) cancelAnimationFrame(rafId);
+        hoveredCountryIdRef.current = null;
+        countriesLoadedRef.current = false;
         markerRef.current?.remove();
         markerRef.current = null;
         for (const m of weatherMarkersRef.current.values()) {
@@ -422,6 +539,66 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
         }
       }
     }, [appMode]);
+
+    // Sync Country Mode (lazy-load countries GeoJSON + layer visibility)
+    useEffect(() => {
+      const map = mapRef.current;
+      if (!map || !isLoadedRef.current) return;
+
+      const layerIds = [
+        'countries-fill',
+        'countries-outline-glow',
+        'countries-outline',
+      ];
+
+      if (!countryMode) {
+        for (const id of layerIds) {
+          if (map.getLayer(id)) {
+            map.setLayoutProperty(id, 'visibility', 'none');
+          }
+        }
+        clearCountryHover();
+        onCountryLoadingRef.current?.(false);
+        map.getCanvas().style.cursor =
+          appModeRef.current === 'simulator' ? 'crosshair' : '';
+        return;
+      }
+
+      let cancelled = false;
+      if (!countriesLoadedRef.current) {
+        onCountryLoadingRef.current?.(true);
+        loadCountriesGeoJson()
+          .then((data) => {
+            if (cancelled || !mapRef.current) return;
+            const src = map.getSource('countries-source') as
+              | maplibregl.GeoJSONSource
+              | undefined;
+            src?.setData(data);
+            countriesLoadedRef.current = true;
+            for (const id of layerIds) {
+              if (map.getLayer(id)) {
+                map.setLayoutProperty(id, 'visibility', 'visible');
+              }
+            }
+          })
+          .catch(() => {
+            // Transient fetch failure; next toggle will retry
+          })
+          .finally(() => {
+            onCountryLoadingRef.current?.(false);
+          });
+      } else {
+        for (const id of layerIds) {
+          if (map.getLayer(id)) {
+            map.setLayoutProperty(id, 'visibility', 'visible');
+          }
+        }
+      }
+
+      return () => {
+        cancelled = true;
+      };
+    }, [countryMode, mapInstance]);
 
     // Sync NASA GIBS / SSEC RealEarth Cloud Cover overlay (hidden in simulator mode)
     useEffect(() => {
@@ -781,6 +958,32 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
           showHeatmap={simShowHeatmap}
           playing={simPlaying}
         />
+        {countryMode && hoveredCountry && (
+          <div
+            ref={countryTooltipRef}
+            className="country-hover-tooltip"
+            aria-live="polite"
+          >
+            <div className="country-hover-title-row">
+              {hoveredCountry.flag && (
+                <span className="country-hover-flag" aria-hidden="true">
+                  {hoveredCountry.flag}
+                </span>
+              )}
+              <span>{hoveredCountry.nameTr}</span>
+            </div>
+            {(hoveredCountry.iso || hoveredCountry.continent) && (
+              <div className="country-hover-meta">
+                {hoveredCountry.iso && (
+                  <span className="country-hover-iso">{hoveredCountry.iso}</span>
+                )}
+                {hoveredCountry.continent && (
+                  <span>{hoveredCountry.continent}</span>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </>
     );
   }

@@ -6,6 +6,7 @@ import {
   Cloud,
   CloudRain,
   CloudSun,
+  Flag,
   Globe,
   Layers,
   Mountain,
@@ -32,6 +33,8 @@ interface LayerPanelProps {
   rainLoading: boolean;
   cloudsEnabled: boolean;
   cloudsOpacity: number;
+  countryMode: boolean;
+  countryLoading: boolean;
   onSelectLayer: (id: BaseLayerId) => void;
   onToggleTerrain3D: () => void;
   onChangeExaggeration: (value: number) => void;
@@ -46,6 +49,7 @@ interface LayerPanelProps {
   onChangeRainOpacity: (value: number) => void;
   onToggleClouds: () => void;
   onChangeCloudsOpacity: (value: number) => void;
+  onToggleCountryMode: () => void;
 }
 
 export function LayerPanel({
@@ -64,6 +68,8 @@ export function LayerPanel({
   rainLoading,
   cloudsEnabled,
   cloudsOpacity,
+  countryMode,
+  countryLoading,
   onSelectLayer,
   onToggleTerrain3D,
   onChangeExaggeration,
@@ -78,6 +84,7 @@ export function LayerPanel({
   onChangeRainOpacity,
   onToggleClouds,
   onChangeCloudsOpacity,
+  onToggleCountryMode,
 }: LayerPanelProps) {
   const [expanded, setExpanded] = useState(true);
 
@@ -380,6 +387,31 @@ export function LayerPanel({
                 aria-checked={peaksEnabled}
                 className={`switch-btn ${peaksEnabled ? 'on' : ''}`}
                 onClick={onTogglePeaks}
+              >
+                <span className="switch-thumb" />
+              </button>
+            </div>
+
+            <div className="panel-divider" style={{ margin: '10px 0 6px' }} />
+
+            <div className="toggle-row">
+              <div className="toggle-label-group">
+                <Flag size={16} color="#38bdf8" />
+                <div>
+                  <div className="toggle-label-title">Ülke Modu</div>
+                  <div className="toggle-label-sub">
+                    {countryLoading
+                      ? 'Ülke sınırları yükleniyor...'
+                      : 'Fareyle gelince ülke sınırı ve adı'}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={countryMode}
+                className={`switch-btn ${countryMode ? 'on' : ''}`}
+                onClick={onToggleCountryMode}
               >
                 <span className="switch-thumb" />
               </button>

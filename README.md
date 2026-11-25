@@ -1,6 +1,6 @@
 # Topog — Dünya Fiziksel Haritası & Canlı Atmosfer Atlası
 
-**Aktif Sürüm:** `T 4.0` · **Sürüm Geçmişi:** [CHANGELOG.md](./CHANGELOG.md)
+**Aktif Sürüm:** `T 4.1` · **Sürüm Geçmişi:** [CHANGELOG.md](./CHANGELOG.md)
 
 Topog; tamamen ücretsiz, API anahtarı gerektirmeyen açık coğrafi ve meteorolojik veri kaynaklarıyla çalışan etkileşimli 2B/3B dünya fiziksel harita, canlı hava durumu, yağmur radarı ve uydu bulut örtüsü uygulamasıdır.
 
@@ -17,6 +17,7 @@ Topog; tamamen ücretsiz, API anahtarı gerektirmeyen açık coğrafi ve meteoro
   - **Esri World Imagery** (Gerçek uydu görüntüleri)
 - **3D Arazi (DEM):** AWS Terrarium yükseklik karoları ile 3 boyutlu yeryüzü ve `1.0x – 3.0x` yükseklik abartısı kaydırıcısı.
 - **Gölgeli Kabartma (Hillshade)** ve **Küre Görünümü (Globe)** projeksiyonu.
+- **Ülke Modu:** Natural Earth `ne_50m_admin_0_countries` tabanlı 242 ülke/bölge sınır verisi ([`public/data/countries.geojson`](./public/data/countries.geojson)); fareyle üzerine gelindiğinde parlak cam mavisi sınır vurgusu ve imleç yanında bayraklı Türkçe ülke adı/kıta kartı.
 - **Arama, Odak ve Nokta İnceleme:**
   - Nominatim ile canlı yer/dağ/şehir arama.
   - Hızlı yer şekli odak çipleri (*Türkiye, Ağrı Dağı, Everest, Mont Blanc, Büyük Kanyon, Aconcagua*).
@@ -43,7 +44,7 @@ Topog; tamamen ücretsiz, API anahtarı gerektirmeyen açık coğrafi ve meteoro
 - **1-Tıkla Senaryolar & Canlı Grafik:** *Sibirya DEK Karı*, *Sahra Sıcağı*, *Akdeniz Siklonu*, *Balkan Cephesi* hazır senaryoları; şehir/dağ detay kartında anlık sıcaklık ve kar kalınlığı (`cm`) zaman serisi grafiği.
 
 ### Sürüm Takibi
-- Uygulama içi sol üstteki **`T 4.0`** rozetine tıklayarak tüm sürüm notlarını (*Eklenenler / Yapılanlar / Çıkarılanlar*) görüntüleyebilirsiniz.
+- Uygulama içi sol üstteki **`T 4.1`** rozetine tıklayarak tüm sürüm notlarını (*Eklenenler / Yapılanlar / Çıkarılanlar*) görüntüleyebilirsiniz.
 - Proje kuralları ve uzman alt ajan rehberi [`AGENTS.md`](./AGENTS.md) ve [`.agents/agents/`](./.agents/agents/) içinde tutulur.
 
 ---

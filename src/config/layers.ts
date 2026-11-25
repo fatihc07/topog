@@ -277,6 +277,72 @@ export function buildInitialStyle(defaultLayer: BaseLayerId): StyleSpecification
     },
   });
 
+  sources['countries-source'] = {
+    type: 'geojson',
+    data: { type: 'FeatureCollection', features: [] },
+  };
+
+  layers.push({
+    id: 'countries-fill',
+    type: 'fill',
+    source: 'countries-source',
+    layout: { visibility: 'none' },
+    paint: {
+      'fill-color': '#38bdf8',
+      'fill-opacity': [
+        'case',
+        ['boolean', ['feature-state', 'hover'], false],
+        0.22,
+        0.001,
+      ],
+    },
+  });
+
+  layers.push({
+    id: 'countries-outline-glow',
+    type: 'line',
+    source: 'countries-source',
+    layout: { visibility: 'none' },
+    paint: {
+      'line-color': '#38bdf8',
+      'line-width': [
+        'case',
+        ['boolean', ['feature-state', 'hover'], false],
+        6,
+        0,
+      ],
+      'line-blur': 4,
+      'line-opacity': [
+        'case',
+        ['boolean', ['feature-state', 'hover'], false],
+        0.55,
+        0,
+      ],
+    },
+  });
+
+  layers.push({
+    id: 'countries-outline',
+    type: 'line',
+    source: 'countries-source',
+    layout: { visibility: 'none' },
+    paint: {
+      'line-color': '#e0f2fe',
+      'line-width': [
+        'case',
+        ['boolean', ['feature-state', 'hover'], false],
+        2.2,
+        0,
+      ],
+      'line-opacity': [
+        'case',
+        ['boolean', ['feature-state', 'hover'], false],
+        0.96,
+        0,
+      ],
+    },
+  });
+
   sources['sim-waves'] = {
     type: 'geojson',
     data: { type: 'FeatureCollection', features: [] },

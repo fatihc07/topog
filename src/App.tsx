@@ -102,6 +102,8 @@ export default function App() {
   const [exaggeration, setExaggeration] = useState(1.6);
   const [hillshade, setHillshade] = useState(false);
   const [globeMode, setGlobeMode] = useState(false);
+  const [countryMode, setCountryMode] = useState(false);
+  const [countryLoading, setCountryLoading] = useState(false);
 
   const [rainEnabled, setRainEnabled] = useState(false);
   const [rainOpacity, setRainOpacity] = useState(0.75);
@@ -1027,6 +1029,8 @@ export default function App() {
         onSelectWeather={handleSelectWeather}
         onSelectPeak={handleSelectPeak}
         onLaunchSimWave={handleLaunchSimWave}
+        countryMode={countryMode}
+        onCountryLoadingChange={setCountryLoading}
       />
 
       <ModeTabs
@@ -1057,6 +1061,8 @@ export default function App() {
         rainLoading={rainLoading}
         cloudsEnabled={cloudsEnabled}
         cloudsOpacity={cloudsOpacity}
+        countryMode={countryMode}
+        countryLoading={countryLoading}
         onSelectLayer={setActiveLayer}
         onToggleTerrain3D={() => setTerrain3D((prev) => !prev)}
         onChangeExaggeration={setExaggeration}
@@ -1071,6 +1077,7 @@ export default function App() {
         onChangeRainOpacity={setRainOpacity}
         onToggleClouds={() => setCloudsEnabled((prev) => !prev)}
         onChangeCloudsOpacity={setCloudsOpacity}
+        onToggleCountryMode={() => setCountryMode((prev) => !prev)}
       />
 
       <MapControls

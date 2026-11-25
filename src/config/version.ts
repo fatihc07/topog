@@ -7,9 +7,23 @@ export interface ReleaseEntry {
   removed: string[];
 }
 
-export const APP_VERSION = 'T 4.0';
+export const APP_VERSION = 'T 4.1';
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
+  {
+    version: 'T 4.1',
+    date: '2026-11-25',
+    title: 'Ülke Modu — Etkileşimli Ülke Sınırları, Parlak Vurgu ve Bayraklı Türkçe Ülke Kartı',
+    added: [
+      'Katman panelinin ("Harita Katmanları & Arazi") son sırasına Ülke Modu anahtarı eklendi (src/components/LayerPanel.tsx, src/App.tsx).',
+      'Natural Earth ne_50m_admin_0_countries tabanlı optimize edilmiş yerel sınır verisi (public/data/countries.geojson: 242 ülke/bölge, sayısal feature.id, Türkçe ülke adları, kıta bilgisi ve ISO kodu) ve tembel/önbellekli yükleme servisi (src/services/countryService.ts) eklendi.',
+      'Harita üzerinde fareyle bir ülkenin üzerine gelindiğinde MapLibre feature-state ile sınırların parlak cam mavisi çizilmesi (countries-fill, countries-outline-glow, countries-outline) ve imleç yanında bayraklı Türkçe ülke adı/kıta kartı gösterilmesi eklendi (src/config/layers.ts, src/components/MapCanvas.tsx, src/index.css).',
+    ],
+    changed: [
+      'qa-verifier denetimi sonrası countryLoading hızlı aç-kapa yarışı, countriesLoadedRef cleanup ve tooltip sağ kenar kırpma payı iyileştirildi.',
+    ],
+    removed: [],
+  },
   {
     version: 'T 4.0',
     date: '2026-11-25',
