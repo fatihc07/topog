@@ -1,6 +1,6 @@
 # Topog — Dünya Fiziksel Haritası & Canlı Atmosfer Atlası
 
-**Aktif Sürüm:** `T 2.2` · **Sürüm Geçmişi:** [CHANGELOG.md](./CHANGELOG.md)
+**Aktif Sürüm:** `T 3.0` · **Sürüm Geçmişi:** [CHANGELOG.md](./CHANGELOG.md)
 
 Topog; tamamen ücretsiz, API anahtarı gerektirmeyen açık coğrafi ve meteorolojik veri kaynaklarıyla çalışan etkileşimli 2B/3B dünya fiziksel harita, canlı hava durumu, yağmur radarı ve uydu bulut örtüsü uygulamasıdır.
 
@@ -36,8 +36,13 @@ Topog; tamamen ücretsiz, API anahtarı gerektirmeyen açık coğrafi ve meteoro
 - **Yağmur Radarı (RainViewer):** Canlı yağış radarı, `%20 – %100` şeffaflık ayarı ve son 2 saat için **Oynat / Duraklat** animasyon çubuğu.
 - **Canlı Bulut Örtüsü (Uydu IR):** SSEC RealEarth küresel jeostasyoner uydu IR bulut katmanı (`z8`'e kadar yüksek çözünürlük, özel `cloud-ir://` şeffaf bulut protokolü) ve `%20 – %100` şeffaflık ayarı.
 
+### Hava Simülatörü (İzole Mod)
+- **Canlı Atlas | Hava Simülatörü Sekmeleri:** Canlı hava verileri ve 15 dk önbelleklerden tamamen izole edilmiş etkileşimli fizik simülasyonu.
+- **Dalga Araçları:** Haritaya tıklayarak **Soğuk Dalga (❄️)**, **Sıcak Dalga (🔥)** ve **Nemli Kütle (🌧️)** gönderme; rüzgar yönüne göre sürüklenme, deniz üzerinden nem toplama, dağ sıralarında orografik yağış/kar yoğunlaşması ve soğuk+sıcak çarpışmalarında cephe fırtınası oluşumu.
+- **Dinamik Şehir & Zirve Tepkisi:** Şehir sıcaklıkları, animasyonlu hava ikonları ve dağ zirvelerindeki kar kalınlığı/erimesi (`cm`) anlık hesaplanır.
+
 ### Sürüm Takibi
-- Uygulama içi sol üstteki **`T 2.2`** rozetine tıklayarak tüm sürüm notlarını (*Eklenenler / Yapılanlar / Çıkarılanlar*) görüntüleyebilirsiniz.
+- Uygulama içi sol üstteki **`T 3.0`** rozetine tıklayarak tüm sürüm notlarını (*Eklenenler / Yapılanlar / Çıkarılanlar*) görüntüleyebilirsiniz.
 - Proje kuralları ve uzman alt ajan rehberi [`AGENTS.md`](./AGENTS.md) ve [`.agents/agents/`](./.agents/agents/) içinde tutulur.
 
 ---

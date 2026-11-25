@@ -7,6 +7,24 @@ Sürüm numaralandırma kuralı: **`T <Büyük>.<Küçük>`**
 
 ---
 
+## [T 3.0] — 2026-11-25
+**Büyük Sürüm — Etkileşimli Hava Simülatörü**
+
+### Eklenenler
+- Canlı moddan tamamen izole **Hava Simülatörü** sekmesi eklendi (`src/components/ModeTabs.tsx`: `Canlı Atlas` | `Hava Simülatörü`).
+- Tıklayarak dairesel hava dalgaları başlatan fizik motoru eklendi (`src/types/simulator.ts`, `src/services/simulatorEngine.ts`): **Soğuk Dalga** (❄️), **Sıcak Dalga** (🔥) ve **Nemli Kütle** (🌧️), rüzgar yönü sürüklenmesi, deniz üzerinden geçerken nem toplama, yüksek dağ sıralarında orografik yağış/kar yoğunlaşması ve soğuk+sıcak dalga çarpışmalarında cephe fırtınası oluşumu.
+- Simülatör araç çubuğu (`src/components/SimulatorDock.tsx`) ve harita üzerinde canlı GeoJSON dalga/bulut/yağış/fırtına katmanları (`src/config/layers.ts`, `src/components/MapCanvas.tsx`) eklendi.
+- Simülatör sekmesinde şehir sıcaklıkları, animasyonlu hava ikonları, dağ zirve sıcaklıkları ve dinamik kar birikimi/erimesi (`cm`) anlık güncellenir; Canlı Atlas verisi ve 15 dk önbellekleri kesinlikle etkilenmez.
+
+### Yapılanlar / İyileştirmeler
+- `qa-verifier` denetiminde tespit edilen radar katman sızıntısı, simülatör modunda canlı ağ çağrısı/zamanlayıcı iptali ve simülatör etiket tooltip ayrımı (`MapCanvas.tsx`, `App.tsx`) giderildi.
+- Telemetri çubuğu ve detay kartı simülatör moduna uyumlu hale getirildi (`TelemetryBar.tsx`, `WeatherDetailCard.tsx`).
+
+### Çıkarılanlar
+- Bu sürümde kaldırılan bir özellik yoktur.
+
+---
+
 ## [T 2.2] — 2026-11-25
 **Proje Kuralları ve Uzman Alt Ajan Sistemi**
 

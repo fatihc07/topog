@@ -1647,3 +1647,274 @@ body,
     bottom: 44px;
   }
 }
+
+/* Top-Center App Mode Switcher (Canlı Atlas | Hava Simülatörü) */
+.mode-tabs {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 22;
+  padding: 4px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mode-tab-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 13px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.mode-tab-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-surface);
+}
+
+.mode-tab-btn.is-active {
+  background: rgba(56, 189, 248, 0.22);
+  color: var(--text-primary);
+  box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.45);
+}
+
+.mode-tab-btn.is-simulator.is-active {
+  background: rgba(168, 85, 247, 0.24);
+  box-shadow: inset 0 0 0 1px rgba(192, 132, 252, 0.55);
+}
+
+.mode-tab-badge {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(192, 132, 252, 0.28);
+  color: #e9d5ff;
+}
+
+/* Simulator Dock */
+.sim-dock {
+  position: absolute;
+  bottom: 48px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 19;
+  width: min(860px, calc(100vw - 32px));
+  padding: 10px 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sim-dock-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.sim-tools-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.sim-tool-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  border-radius: 10px;
+  border: 1px solid var(--border-glass);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.12s ease;
+}
+
+.sim-tool-btn:hover {
+  background: var(--bg-surface-hover);
+  transform: translateY(-1px);
+}
+
+.sim-tool-btn.is-cold.is-active {
+  background: rgba(56, 189, 248, 0.22);
+  border-color: rgba(56, 189, 248, 0.7);
+  color: #bae6fd;
+}
+
+.sim-tool-btn.is-warm.is-active {
+  background: rgba(249, 115, 22, 0.22);
+  border-color: rgba(251, 146, 60, 0.75);
+  color: #fed7aa;
+}
+
+.sim-tool-btn.is-moisture.is-active {
+  background: rgba(16, 185, 129, 0.22);
+  border-color: rgba(52, 211, 153, 0.7);
+  color: #a7f3d0;
+}
+
+.sim-hint-pill {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.sim-status-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sim-status-badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.16);
+  color: var(--accent);
+}
+
+.sim-status-badge.is-front {
+  background: rgba(168, 85, 247, 0.18);
+  color: #e9d5ff;
+}
+
+.sim-play-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid rgba(192, 132, 252, 0.55);
+  background: rgba(168, 85, 247, 0.2);
+  color: #f3e8ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.sim-play-btn:hover {
+  background: rgba(168, 85, 247, 0.34);
+}
+
+.sim-control-block {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sim-control-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.sim-control-label strong {
+  font-family: var(--font-mono);
+  color: var(--accent);
+}
+
+.sim-pill-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-glass);
+}
+
+.sim-pill-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 3px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.sim-pill-btn:hover {
+  color: var(--text-primary);
+}
+
+.sim-pill-btn.is-active {
+  background: rgba(56, 189, 248, 0.24);
+  color: var(--text-primary);
+}
+
+.sim-intensity-block {
+  min-width: 120px;
+}
+
+.sim-intensity-slider {
+  width: 72px;
+}
+
+.sim-clear-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 9px;
+  border-radius: 8px;
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  background: rgba(248, 113, 113, 0.14);
+  color: #fecaca;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sim-clear-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.sim-clear-btn:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.26);
+}
+
+@media (max-width: 1240px) {
+  .mode-tabs {
+    top: 14px;
+    left: 16px;
+    transform: none;
+  }
+
+  .top-left-dock {
+    top: 60px;
+  }
+}
+
+@media (max-width: 720px) {
+  .sim-hint-pill {
+    display: none;
+  }
+
+  .sim-dock {
+    bottom: 44px;
+  }
+}

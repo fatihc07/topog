@@ -7,9 +7,25 @@ export interface ReleaseEntry {
   removed: string[];
 }
 
-export const APP_VERSION = 'T 2.2';
+export const APP_VERSION = 'T 3.0';
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
+  {
+    version: 'T 3.0',
+    date: '2026-11-25',
+    title: 'Etkileşimli Hava Simülatörü (Dalgalar, Cephe Fırtınaları, Oroğrafik Yağış & Kar Birikimi)',
+    added: [
+      'Canlı moddan tamamen izole Hava Simülatörü sekmesi eklendi (src/components/ModeTabs.tsx: Canlı Atlas | Hava Simülatörü).',
+      'Tıklayarak dairesel hava dalgaları başlatan fizik motoru eklendi (src/types/simulator.ts, src/services/simulatorEngine.ts): Soğuk Dalga (❄️), Sıcak Dalga (🔥) ve Nemli Kütle (🌧️), rüzgar yönü sürüklenmesi, deniz üzerinden geçerken nem toplama, yüksek dağ sıralarında orografik yağış/kar yoğunlaşması ve soğuk+sıcak dalga çarpışmalarında cephe fırtınası oluşumu.',
+      'Simülatör araç çubuğu (src/components/SimulatorDock.tsx: oynat/duraklat, 0.5x/1x/2x hız, şiddet, mevsim, 8 yönlü rüzgar + durgun, temizle) ve harita üzerinde canlı GeoJSON dalga/bulut/yağış/fırtına katmanları (src/config/layers.ts, src/components/MapCanvas.tsx) eklendi.',
+      'Simülatör sekmesinde şehir sıcaklıkları, animasyonlu hava ikonları, dağ zirve sıcaklıkları ve dinamik kar birikimi/erimesi (cm) anlık güncellenir; Canlı Atlas verisi ve 15 dk önbellekleri kesinlikle etkilenmez.',
+    ],
+    changed: [
+      'qa-verifier denetiminde tespit edilen radar katman sızıntısı, simülatör modunda canlı ağ çağrısı/zamanlayıcı iptali ve simülatör etiket tooltip ayrımı (MapCanvas.tsx, App.tsx) giderildi.',
+      'Telemetri çubuğu ve detay kartı simülatör verisini canlı veriden ayırt edecek şekilde güncellendi (TelemetryBar.tsx, WeatherDetailCard.tsx).',
+    ],
+    removed: [],
+  },
   {
     version: 'T 2.2',
     date: '2026-11-25',

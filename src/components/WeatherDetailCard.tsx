@@ -8,6 +8,7 @@ import { WeatherIcon } from './WeatherIcon';
 interface WeatherDetailCardProps {
   weather: WeatherData;
   elevationMeters?: number;
+  isSimulated?: boolean;
   refreshing: boolean;
   onRefresh: (weather: WeatherData) => void;
   onClose: () => void;
@@ -16,6 +17,7 @@ interface WeatherDetailCardProps {
 export function WeatherDetailCard({
   weather,
   elevationMeters,
+  isSimulated = false,
   refreshing,
   onRefresh,
   onClose,
@@ -36,8 +38,9 @@ export function WeatherDetailCard({
     Math.ceil((WEATHER_CACHE_TTL_MS - elapsedMs) / 60000)
   );
 
-  const cacheStatusText =
-    weather.source === 'cache'
+  const cacheStatusText = isSimulated
+    ? 'Hava Simülatörü · Canlı senaryo hesaplaması'
+    : weather.source === 'cache'
       ? `Bellekten · ${elapsedMin === 0 ? 'Az önce' : `${elapsedMin} dk önce`} (${remainingMin} dk geçerli)`
       : 'Canlı veri · Az önce güncellendi';
 
@@ -130,17 +133,19 @@ export function WeatherDetailCard({
         <span>{cacheStatusText}</span>
       </div>
 
-      <div className="inspect-actions">
-        <button
-          type="button"
-          className="btn-accent"
-          onClick={() => onRefresh(weather)}
-          disabled={refreshing}
-        >
-          <RefreshCw size={14} className={refreshing ? 'spin' : undefined} />
-          <span>{refreshing ? 'Güncelleniyor...' : 'Şimdi Yenile'}</span>
-        </button>
-      </div>
+      {!isSimulated && (
+        <div className="inspect-actions">
+          <button
+            type="button"
+            className="btn-accent"
+            onClick={() => onRefresh(weather)}
+            disabled={refreshing}
+          >
+            <RefreshCw size={14} className={refreshing ? 'spin' : undefined} />
+            <span>{refreshing ? 'Güncelleniyor...' : 'Şimdi Yenile'}</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

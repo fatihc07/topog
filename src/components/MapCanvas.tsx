@@ -3,9 +3,11 @@ import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { BASE_LAYERS, buildInitialStyle } from '../config/layers';
 import { registerCloudProtocol } from '../services/cloudProtocol';
+import { buildSimulatorGeoJson } from '../services/simulatorEngine';
 import { buildNightPolygonGeoJson } from '../services/solarService';
 import { getWeatherMeta } from '../services/weatherService';
 import type { BaseLayerId, FlyTarget, TelemetryState } from '../types/map';
+import type { AppMode, SimFrontZone, SimWave } from '../types/simulator';
 import type {
   PeakDisplayItem,
   RadarFrame,
@@ -22,6 +24,9 @@ export interface MapCanvasHandle {
 }
 
 interface MapCanvasProps {
+  appMode: AppMode;
+  simWaves: SimWave[];
+  simFronts: SimFrontZone[];
   activeLayer: BaseLayerId;
   terrain3D: boolean;
   exaggeration: number;
@@ -49,11 +54,15 @@ interface MapCanvasProps {
   onViewportChange: (bounds: ViewportBounds) => void;
   onSelectWeather: (item: WeatherData) => void;
   onSelectPeak: (item: PeakDisplayItem) => void;
+  onLaunchSimWave: (lng: number, lat: number) => void;
 }
 
 export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
   function MapCanvas(
     {
+      appMode,
+      simWaves,
+      simFronts,
       activeLayer,
       terrain3D,
       exaggeration,
@@ -81,6 +90,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
       onViewportChange,
       onSelectWeather,
       onSelectPeak,
+      onLaunchSimWave,
     },
     ref
   ) {
@@ -92,18 +102,22 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
     const mountedRadarIdsRef = useRef<Set<string>>(new Set());
     const isLoadedRef = useRef(false);
     const terrainRef = useRef(terrain3D);
+    const appModeRef = useRef(appMode);
     const onTelemetryRef = useRef(onTelemetryChange);
     const onInspectRef = useRef(onInspectPoint);
     const onViewportRef = useRef(onViewportChange);
     const onSelectWeatherRef = useRef(onSelectWeather);
     const onSelectPeakRef = useRef(onSelectPeak);
+    const onLaunchSimWaveRef = useRef(onLaunchSimWave);
 
     terrainRef.current = terrain3D;
+    appModeRef.current = appMode;
     onTelemetryRef.current = onTelemetryChange;
     onInspectRef.current = onInspectPoint;
     onViewportRef.current = onViewportChange;
     onSelectWeatherRef.current = onSelectWeather;
     onSelectPeakRef.current = onSelectPeak;
+    onLaunchSimWaveRef.current = onLaunchSimWave;
 
     useImperativeHandle(ref, () => ({
       zoomIn: () => {
@@ -237,7 +251,11 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
       });
 
       map.on('click', (e) => {
-        onInspectRef.current(e.lngLat.lng, e.lngLat.lat);
+        if (appModeRef.current === 'simulator') {
+          onLaunchSimWaveRef.current(e.lngLat.lng, e.lngLat.lat);
+        } else {
+          onInspectRef.current(e.lngLat.lng, e.lngLat.lat);
+        }
       });
 
       mapRef.current = map;
@@ -361,7 +379,44 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
       }
     }, [globeMode]);
 
-    // Sync NASA GIBS Cloud Cover overlay
+    // Sync Simulator overlay GeoJSON layers & cursor
+    useEffect(() => {
+      const map = mapRef.current;
+      if (!map) return;
+
+      map.getCanvas().style.cursor = appMode === 'simulator' ? 'crosshair' : '';
+
+      if (!isLoadedRef.current) return;
+
+      const simVis = appMode === 'simulator' ? 'visible' : 'none';
+      const simLayerIds = [
+        'sim-waves-fill',
+        'sim-waves-line',
+        'sim-clouds-fill',
+        'sim-precip-fill',
+      ];
+      for (const lid of simLayerIds) {
+        if (map.getLayer(lid)) {
+          map.setLayoutProperty(lid, 'visibility', simVis);
+        }
+      }
+
+      if (appMode !== 'simulator') return;
+
+      const { wavesGeoJson, cloudsGeoJson, precipGeoJson } =
+        buildSimulatorGeoJson(simWaves, simFronts);
+      (map.getSource('sim-waves') as maplibregl.GeoJSONSource | undefined)?.setData(
+        wavesGeoJson
+      );
+      (map.getSource('sim-clouds') as maplibregl.GeoJSONSource | undefined)?.setData(
+        cloudsGeoJson
+      );
+      (map.getSource('sim-precip') as maplibregl.GeoJSONSource | undefined)?.setData(
+        precipGeoJson
+      );
+    }, [appMode, simWaves, simFronts]);
+
+    // Sync NASA GIBS / SSEC RealEarth Cloud Cover overlay (hidden in simulator mode)
     useEffect(() => {
       const map = mapRef.current;
       if (!map || !isLoadedRef.current) return;
@@ -369,11 +424,11 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
         map.setLayoutProperty(
           'clouds-overlay',
           'visibility',
-          cloudsEnabled ? 'visible' : 'none'
+          appMode === 'live' && cloudsEnabled ? 'visible' : 'none'
         );
         map.setPaintProperty('clouds-overlay', 'raster-opacity', cloudsOpacity);
       }
-    }, [cloudsEnabled, cloudsOpacity]);
+    }, [appMode, cloudsEnabled, cloudsOpacity]);
 
     // Sync RainViewer Radar overlay & 2h animation frames without flicker
     useEffect(() => {
@@ -382,7 +437,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
 
       const mountedIds = mountedRadarIdsRef.current;
 
-      if (!rainEnabled || radarFrames.length === 0) {
+      if (appMode !== 'live' || !rainEnabled || radarFrames.length === 0) {
         for (const id of mountedIds) {
           if (map.getLayer(id)) {
             map.setLayoutProperty(id, 'visibility', 'none');
@@ -444,7 +499,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
           );
         }
       }
-    }, [rainEnabled, rainOpacity, radarFrames, activeRadarIndex]);
+    }, [appMode, rainEnabled, rainOpacity, radarFrames, activeRadarIndex]);
 
     // Handle flyTo requests
     useEffect(() => {
@@ -513,9 +568,13 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
 
         const buildBadgeContent = (btn: HTMLButtonElement) => {
           btn.className = `weather-badge${isSelected ? ' selected' : ''}`;
-          btn.title = `${item.cityName}: ${Math.round(item.temperature)}°C · ${meta.label} (${
-            item.source === 'cache' ? 'Bellekten' : 'Canlı'
-          })`;
+          const sourceLabel =
+            appMode === 'simulator'
+              ? 'Simülatör'
+              : item.source === 'cache'
+                ? 'Bellekten'
+                : 'Canlı';
+          btn.title = `${item.cityName}: ${Math.round(item.temperature)}°C · ${meta.label} (${sourceLabel})`;
           btn.innerHTML = '';
 
           const iconSpan = document.createElement('span');
@@ -534,12 +593,14 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
           tempSpan.className = 'weather-badge-temp';
           tempSpan.textContent = `${Math.round(item.temperature)}°`;
 
-          const dotSpan = document.createElement('span');
-          dotSpan.className = `cache-dot ${
-            item.source === 'cache' ? 'cached' : 'live'
-          }`;
-
-          btn.append(iconSpan, nameSpan, tempSpan, dotSpan);
+          btn.append(iconSpan, nameSpan, tempSpan);
+          if (appMode === 'live') {
+            const dotSpan = document.createElement('span');
+            dotSpan.className = `cache-dot ${
+              item.source === 'cache' ? 'cached' : 'live'
+            }`;
+            btn.append(dotSpan);
+          }
           btn.onclick = (ev) => {
             ev.stopPropagation();
             onSelectWeatherRef.current(item);
@@ -572,7 +633,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
           markers.set(item.cityId, marker);
         }
       }
-    }, [weatherItems, selectedWeatherCityId]);
+    }, [appMode, weatherItems, selectedWeatherCityId]);
 
     // Reconcile mountain peak markers (name + elevation + real summit temp if available)
     useEffect(() => {
@@ -604,11 +665,15 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
               typeof weather.snowDepthCm === 'number' && weather.snowDepthCm > 0
                 ? ` · Kar: ${weather.snowDepthCm.toLocaleString('tr-TR')} cm`
                 : '';
+            const sourceLabel =
+              appMode === 'simulator'
+                ? 'Simülatör'
+                : weather.source === 'cache'
+                  ? 'Bellekten'
+                  : 'Canlı';
             btn.title = `${peak.name} (${eleLabel}): ${Math.round(
               weather.temperature
-            )}°C · ${meta.label}${snowTip} (${
-              weather.source === 'cache' ? 'Bellekten' : 'Canlı'
-            })`;
+            )}°C · ${meta.label}${snowTip} (${sourceLabel})`;
           } else {
             btn.title = `${peak.name} · ${eleLabel}`;
           }
@@ -652,12 +717,14 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
               btn.append(snowSpan);
             }
 
-            const dotSpan = document.createElement('span');
-            dotSpan.className = `cache-dot ${
-              weather.source === 'cache' ? 'cached' : 'live'
-            }`;
+            if (appMode === 'live') {
+              const dotSpan = document.createElement('span');
+              dotSpan.className = `cache-dot ${
+                weather.source === 'cache' ? 'cached' : 'live'
+              }`;
 
-            btn.append(dotSpan);
+              btn.append(dotSpan);
+            }
           }
 
           btn.onclick = (ev) => {
@@ -692,7 +759,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
           markers.set(peak.id, marker);
         }
       }
-    }, [peakItems, selectedPeakId]);
+    }, [appMode, peakItems, selectedPeakId]);
 
     return <div ref={containerRef} className="map-container" />;
   }

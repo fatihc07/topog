@@ -1,12 +1,16 @@
 import { BASE_LAYER_MAP } from '../config/layers';
 import { WEATHER_MIN_ZOOM } from '../services/cityIndex';
 import type { BaseLayerId, TelemetryState } from '../types/map';
+import type { AppMode } from '../types/simulator';
 import type { WeatherSyncSummary } from '../types/weather';
 
 interface TelemetryBarProps {
   telemetry: TelemetryState;
   activeLayer: BaseLayerId;
   terrain3D: boolean;
+  appMode: AppMode;
+  simWaveCount: number;
+  simFrontCount: number;
   weatherEnabled: boolean;
   weatherSummary: WeatherSyncSummary;
 }
@@ -21,13 +25,18 @@ export function TelemetryBar({
   telemetry,
   activeLayer,
   terrain3D,
+  appMode,
+  simWaveCount,
+  simFrontCount,
   weatherEnabled,
   weatherSummary,
 }: TelemetryBarProps) {
   const layerCfg = BASE_LAYER_MAP[activeLayer];
 
   let weatherStatus = 'Hava: Kapalı';
-  if (weatherEnabled) {
+  if (appMode === 'simulator') {
+    weatherStatus = `Simülatör: ${simWaveCount} dalga · ${simFrontCount} cephe`;
+  } else if (weatherEnabled) {
     if (telemetry.zoom < WEATHER_MIN_ZOOM) {
       weatherStatus = `Hava durumu için yaklaşın (z${WEATHER_MIN_ZOOM}+)`;
     } else if (weatherSummary.loading) {
