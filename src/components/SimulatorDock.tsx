@@ -1,16 +1,25 @@
 import {
   CloudRain,
   Flame,
+  Orbit,
   Pause,
   Play,
   Snowflake,
+  Sun,
+  Thermometer,
   Trash2,
 } from 'lucide-react';
-import type { SimSeason } from '../types/simulator';
+import { SIMULATOR_SCENARIOS } from '../services/simulatorScenarios';
+import type {
+  SimScenario,
+  SimSeason,
+  SimSystemTool,
+} from '../types/simulator';
 
 export interface SimulatorDockProps {
-  thermalTool: 'cold' | 'warm' | null;
+  systemTool: SimSystemTool;
   moistureActive: boolean;
+  showHeatmap: boolean;
   intensity: number;
   windDirDeg: number | null;
   playing: boolean;
@@ -18,8 +27,10 @@ export interface SimulatorDockProps {
   season: SimSeason;
   waveCount: number;
   frontCount: number;
-  onToggleThermal: (kind: 'cold' | 'warm') => void;
+  onToggleSystem: (kind: 'cold' | 'warm' | 'cyclone' | 'high_pressure') => void;
   onToggleMoisture: () => void;
+  onToggleHeatmap: () => void;
+  onSelectScenario: (scenario: SimScenario) => void;
   onChangeIntensity: (val: number) => void;
   onChangeWindDir: (deg: number | null) => void;
   onTogglePlay: () => void;
@@ -50,23 +61,33 @@ const WIND_DIR_OPTIONS: Array<{ deg: number | null; label: string }> = [
 ];
 
 function getActiveComboHint(
-  thermalTool: 'cold' | 'warm' | null,
+  systemTool: SimSystemTool,
   moistureActive: boolean
 ): string {
-  if (thermalTool === 'cold' && moistureActive) {
+  if (systemTool === 'high_pressure') {
+    return '☀️ Yüksek Basınç (H) Açık Hava';
+  }
+  if (systemTool === 'cyclone') {
+    return moistureActive
+      ? '🌀+🌧️ Güçlü Siklon (L) Fırtına'
+      : '🌀 Siklon (L) Fırtına';
+  }
+  if (systemTool === 'cold' && moistureActive) {
     return '❄️+🌧️ ≤0°C Kar · >0°C Yağmur';
   }
-  if (thermalTool === 'warm' && moistureActive) {
+  if (systemTool === 'warm' && moistureActive) {
     return '🔥+🌧️ Sıcak Yağış Kütlesi';
   }
-  if (thermalTool === 'cold') return '❄️ Kuru Soğuk Dalga';
-  if (thermalTool === 'warm') return '🔥 Kuru Sıcak Dalga';
-  return '🌧️ Nemli Yağış Kütlesi';
+  if (systemTool === 'cold') return '❄️ Kuru Soğuk Dalga';
+  if (systemTool === 'warm') return '🔥 Kuru Sıcak Dalga';
+  if (moistureActive) return '🌧️ Nemli Yağış Kütlesi';
+  return 'Haritaya tıkla veya senaryo seç';
 }
 
 export function SimulatorDock({
-  thermalTool,
+  systemTool,
   moistureActive,
+  showHeatmap,
   intensity,
   windDirDeg,
   playing,
@@ -74,8 +95,10 @@ export function SimulatorDock({
   season,
   waveCount,
   frontCount,
-  onToggleThermal,
+  onToggleSystem,
   onToggleMoisture,
+  onToggleHeatmap,
+  onSelectScenario,
   onChangeIntensity,
   onChangeWindDir,
   onTogglePlay,
@@ -83,7 +106,9 @@ export function SimulatorDock({
   onChangeSeason,
   onClearWaves,
 }: SimulatorDockProps) {
-  const comboHint = getActiveComboHint(thermalTool, moistureActive);
+  const isHighPressure = systemTool === 'high_pressure';
+  const effectiveMoisture = moistureActive && !isHighPressure;
+  const comboHint = getActiveComboHint(systemTool, moistureActive);
 
   return (
     <div
@@ -95,43 +120,87 @@ export function SimulatorDock({
         <div
           className="sim-tools-group"
           role="group"
-          aria-label="Birleşik dalga araçları"
+          aria-label="Hava sistemi araçları"
         >
           <button
             type="button"
             className={`sim-tool-btn is-cold ${
-              thermalTool === 'cold' ? 'is-active' : ''
+              systemTool === 'cold' ? 'is-active' : ''
             }`}
-            aria-pressed={thermalTool === 'cold'}
-            onClick={() => onToggleThermal('cold')}
+            aria-pressed={systemTool === 'cold'}
+            onClick={() => onToggleSystem('cold')}
           >
             <Snowflake size={14} aria-hidden="true" />
-            <span>Soğuk Dalga</span>
+            <span>Soğuk</span>
           </button>
 
           <button
             type="button"
             className={`sim-tool-btn is-warm ${
-              thermalTool === 'warm' ? 'is-active' : ''
+              systemTool === 'warm' ? 'is-active' : ''
             }`}
-            aria-pressed={thermalTool === 'warm'}
-            onClick={() => onToggleThermal('warm')}
+            aria-pressed={systemTool === 'warm'}
+            onClick={() => onToggleSystem('warm')}
           >
             <Flame size={14} aria-hidden="true" />
-            <span>Sıcak Dalga</span>
+            <span>Sıcak</span>
+          </button>
+
+          <button
+            type="button"
+            className={`sim-tool-btn is-cyclone ${
+              systemTool === 'cyclone' ? 'is-active' : ''
+            }`}
+            aria-pressed={systemTool === 'cyclone'}
+            onClick={() => onToggleSystem('cyclone')}
+            title="Alçak basınç siklon fırtına merkezi"
+          >
+            <Orbit size={14} aria-hidden="true" />
+            <span>Siklon (L)</span>
+          </button>
+
+          <button
+            type="button"
+            className={`sim-tool-btn is-high-pressure ${
+              systemTool === 'high_pressure' ? 'is-active' : ''
+            }`}
+            aria-pressed={systemTool === 'high_pressure'}
+            onClick={() => onToggleSystem('high_pressure')}
+            title="Yüksek basınç açık hava kubbesi (nem ve cepheleri bastırır)"
+          >
+            <Sun size={14} aria-hidden="true" />
+            <span>Y. Basınç (H)</span>
           </button>
 
           <button
             type="button"
             className={`sim-tool-btn is-moisture ${
-              moistureActive ? 'is-active' : ''
-            }`}
-            aria-pressed={moistureActive}
+              effectiveMoisture ? 'is-active' : ''
+            } ${isHighPressure ? 'is-dimmed' : ''}`}
+            aria-pressed={effectiveMoisture}
+            disabled={isHighPressure}
             onClick={onToggleMoisture}
-            title="Soğuk veya sıcak dalgayla aynı anda göndermek için açın"
+            title={
+              isHighPressure
+                ? 'Yüksek basınçta nem otomatik olarak bastırılır'
+                : 'Seçili sistemle aynı anda nemli yağış göndermek için açın'
+            }
           >
             <CloudRain size={14} aria-hidden="true" />
-            <span>+ Nemli Kütle</span>
+            <span>+ Nemli</span>
+          </button>
+
+          <button
+            type="button"
+            className={`sim-tool-btn is-heatmap ${
+              showHeatmap ? 'is-active' : ''
+            }`}
+            aria-pressed={showHeatmap}
+            onClick={onToggleHeatmap}
+            title="Sıcaklık ısı haritası ve 0°C donma sınırı katmanını aç/kapat"
+          >
+            <Thermometer size={14} aria-hidden="true" />
+            <span>0°C / Isı</span>
           </button>
         </div>
 
@@ -140,6 +209,29 @@ export function SimulatorDock({
         <div className="sim-status-group" aria-live="polite">
           <span className="sim-status-badge">{waveCount} dalga</span>
           <span className="sim-status-badge is-front">{frontCount} cephe</span>
+        </div>
+      </div>
+
+      <div className="sim-dock-row sim-scenarios-row">
+        <span className="sim-control-label sim-scenarios-label">
+          Senaryolar:
+        </span>
+        <div
+          className="sim-scenarios-list"
+          role="group"
+          aria-label="Hazır hava senaryoları"
+        >
+          {SIMULATOR_SCENARIOS.map((scenario: SimScenario) => (
+            <button
+              key={scenario.id}
+              type="button"
+              className="sim-scenario-pill"
+              title={scenario.description}
+              onClick={() => onSelectScenario(scenario)}
+            >
+              {scenario.badge} {scenario.name}
+            </button>
+          ))}
         </div>
       </div>
 

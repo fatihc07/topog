@@ -21,6 +21,8 @@ const RAD_TO_DEG = 180 / Math.PI;
 const WAVE_DRIFT_KM_PER_SEC = 22;
 const DEFAULT_MAX_AGE_SEC = 52;
 const INITIAL_RADIUS_KM = 95;
+const CYCLONE_SPIN_DEG_PER_SEC = 55;
+const FOEHN_SEARCH_RADIUS_KM = 220;
 
 const HIGH_PEAKS: HighPeak[] = (rawPeaks as PeakTuple[])
   .filter(([, , , , , elevation]) => elevation >= 2000)
@@ -37,7 +39,7 @@ function round1(value: number): number {
 }
 
 function normalizeLng(lng: number): number {
-  let normalized = ((lng + 180) % 360 + 360) % 360 - 180;
+  let normalized = (((lng + 180) % 360) + 360) % 360 - 180;
   if (normalized === -180 && lng > 0) normalized = 180;
   return normalized;
 }
@@ -58,6 +60,26 @@ function haversineKm(
   const a =
     sinLat * sinLat + Math.cos(rLat1) * Math.cos(rLat2) * sinLng * sinLng;
   return 2 * EARTH_RADIUS_KM * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function bearingDeg(
+  fromLat: number,
+  fromLng: number,
+  toLat: number,
+  toLng: number
+): number {
+  const lat1 = fromLat * DEG_TO_RAD;
+  const lat2 = toLat * DEG_TO_RAD;
+  const dLng = (toLng - fromLng) * DEG_TO_RAD;
+  const y = Math.sin(dLng) * Math.cos(lat2);
+  const x =
+    Math.cos(lat1) * Math.sin(lat2) -
+    Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+  return (((Math.atan2(y, x) * RAD_TO_DEG) % 360) + 360) % 360;
+}
+
+function angularDiffDeg(a: number, b: number): number {
+  return Math.abs((((a - b) % 360) + 540) % 360 - 180);
 }
 
 function inBox(
@@ -150,7 +172,19 @@ export function isLikelyOverSea(lat: number, lng: number): boolean {
 }
 
 /**
- * Creates a new simulated atmospheric air mass / wave at the given coordinates.
+ * Returns `'L'` for low-pressure cyclone systems, `'H'` for high-pressure ridges,
+ * or `null` for thermal/moisture waves.
+ */
+export function getActivePressureCenterLabel(
+  kind: SimWaveKind
+): 'L' | 'H' | null {
+  if (kind === 'cyclone') return 'L';
+  if (kind === 'high_pressure') return 'H';
+  return null;
+}
+
+/**
+ * Creates a new simulated atmospheric air mass / pressure system at the given coordinates.
  */
 export function createSimWave(
   kind: SimWaveKind,
@@ -162,27 +196,47 @@ export function createSimWave(
   const clampedStrength = clamp(strength, 0.2, 2.5);
   const clampedLat = clamp(lat, -85, 85);
   const normLng = normalizeLng(lng);
-  const hasMoisture = kind === 'moisture' || withMoisture;
-  const initialMoisture = hasMoisture
-    ? 0.9
-    : kind === 'cold'
-      ? 0.22
-      : 0.14;
+
+  let effectiveWithMoisture = false;
+  let initialMoisture = 0.14;
+  let maxRadiusKm = 650 + clampedStrength * 240;
+
+  if (kind === 'cyclone') {
+    effectiveWithMoisture = true;
+    initialMoisture = 0.88;
+    maxRadiusKm = 700 + clampedStrength * 240;
+  } else if (kind === 'high_pressure') {
+    effectiveWithMoisture = false;
+    initialMoisture = 0.05;
+    maxRadiusKm = 680 + clampedStrength * 220;
+  } else if (kind === 'moisture' || withMoisture) {
+    effectiveWithMoisture = true;
+    initialMoisture = 0.9;
+  } else if (kind === 'cold') {
+    effectiveWithMoisture = false;
+    initialMoisture = 0.22;
+  } else {
+    effectiveWithMoisture = false;
+    initialMoisture = 0.14;
+  }
 
   waveCounter += 1;
 
   return {
     id: `sim-wave-${Date.now()}-${waveCounter}`,
     kind,
-    withMoisture: hasMoisture,
+    withMoisture: effectiveWithMoisture,
     lng: normLng,
     lat: clampedLat,
     originLng: normLng,
     originLat: clampedLat,
     radiusKm: INITIAL_RADIUS_KM,
-    maxRadiusKm: 650 + clampedStrength * 240,
+    maxRadiusKm,
     strength: clampedStrength,
     moisture: initialMoisture,
+    seaMoistureCharge: 0,
+    lakeEffectActive: false,
+    rotationDeg: 0,
     ageSec: 0,
     maxAgeSec: DEFAULT_MAX_AGE_SEC,
     overSea: isLikelyOverSea(clampedLat, normLng),
@@ -235,7 +289,8 @@ function weightedMidpoint(
 
 /**
  * Advances all active waves by dtSec * speedMultiplier, applies wind drift,
- * ocean moisture pickup, orographic mountain lift, and detects cold/warm fronts.
+ * cyclone rotation, DEK lake-effect charging/discharge, high-pressure suppression,
+ * orographic mountain lift, and colliding cold/warm fronts.
  */
 export function stepSimulation(
   waves: SimWave[],
@@ -272,17 +327,54 @@ export function stepSimulation(
 
     const overSea = isLikelyOverSea(nextLat, nextLng);
     let nextMoisture = w.moisture;
-    if (overSea) {
-      nextMoisture = Math.min(1, w.moisture + 0.045 * effectiveDt);
+    let nextSeaCharge = w.seaMoistureCharge ?? 0;
+    let nextLakeEffect = false;
+    let nextRotationDeg = w.rotationDeg ?? 0;
+
+    if (w.kind === 'cyclone') {
+      // Cyclones spin counterclockwise in northern hemisphere, clockwise in southern
+      const spinSign = nextLat >= 0 ? -1 : 1;
+      nextRotationDeg =
+        (nextRotationDeg + spinSign * CYCLONE_SPIN_DEG_PER_SEC * effectiveDt) %
+        360;
+      if (overSea) {
+        nextMoisture = Math.min(1, w.moisture + 0.065 * effectiveDt);
+      } else {
+        nextMoisture = Math.max(0.32, w.moisture - 0.012 * effectiveDt);
+      }
+    } else if (w.kind === 'high_pressure') {
+      nextMoisture = Math.max(0.02, w.moisture - 0.08 * effectiveDt);
+      nextSeaCharge = 0;
     } else {
-      nextMoisture = Math.max(0.08, w.moisture - 0.008 * effectiveDt);
+      if (overSea) {
+        nextMoisture = Math.min(1, w.moisture + 0.045 * effectiveDt);
+      } else {
+        nextMoisture = Math.max(0.08, w.moisture - 0.008 * effectiveDt);
+      }
+
+      // DEK / Lake-Effect Snow: strong cold air charging over sea and dumping onto land
+      if (w.kind === 'cold' && w.strength >= 0.8) {
+        if (overSea) {
+          nextSeaCharge = Math.min(1, nextSeaCharge + 0.12 * effectiveDt);
+          nextLakeEffect = false;
+        } else if (nextSeaCharge >= 0.32) {
+          nextLakeEffect = true;
+          if (nextMoisture < 0.92) {
+            nextMoisture = Math.min(0.92, nextMoisture + 0.18 * effectiveDt);
+          }
+          nextSeaCharge = Math.max(0, nextSeaCharge - 0.04 * effectiveDt);
+        } else {
+          nextLakeEffect = false;
+        }
+      } else {
+        nextSeaCharge = 0;
+      }
     }
 
-    const mountainProximity = computeOrographicProximity(
-      nextLat,
-      nextLng,
-      nextRadius
-    );
+    const mountainProximity =
+      w.kind === 'high_pressure'
+        ? 0
+        : computeOrographicProximity(nextLat, nextLng, nextRadius);
     const nextOrographic = clamp(
       mountainProximity > w.orographicBoost
         ? w.orographicBoost +
@@ -299,6 +391,9 @@ export function stepSimulation(
       lng: nextLng,
       radiusKm: nextRadius,
       moisture: nextMoisture,
+      seaMoistureCharge: nextSeaCharge,
+      lakeEffectActive: nextLakeEffect,
+      rotationDeg: nextRotationDeg,
       ageSec: nextAge,
       overSea,
       orographicBoost: nextOrographic,
@@ -309,6 +404,9 @@ export function stepSimulation(
   const fronts: SimFrontZone[] = [];
   const coldWaves = nextWaves.filter((w) => w.kind === 'cold');
   const warmWaves = nextWaves.filter((w) => w.kind === 'warm');
+  const highPressureWaves = nextWaves.filter(
+    (w) => w.kind === 'high_pressure'
+  );
 
   for (let c = 0; c < coldWaves.length; c += 1) {
     const cold = coldWaves[c];
@@ -330,23 +428,45 @@ export function stepSimulation(
         warm.strength
       );
 
-      const intensity = clamp(
-        ((cold.strength + warm.strength) * 0.5) *
+      let intensity = clamp(
+        (cold.strength + warm.strength) *
+          0.5 *
           (0.45 + overlapRatio * 0.75) *
           Math.min(coldLife, warmLife),
         0.15,
         1.5
       );
-      const radiusKm = Math.max(
+      let radiusKm = Math.max(
         80,
         Math.min(cold.radiusKm, warm.radiusKm) * 0.72
       );
+
+      // High-pressure systems inside/overlapping a front weaken or dissipate it
+      for (let h = 0; h < highPressureWaves.length; h += 1) {
+        const hp = highPressureWaves[h];
+        const hpDist = haversineKm(mid.lat, mid.lng, hp.lat, hp.lng);
+        if (hpDist < hp.radiusKm) {
+          const hpProx = 1 - hpDist / hp.radiusKm;
+          const hpLife = clamp(1 - hp.ageSec / hp.maxAgeSec, 0.1, 1);
+          const suppression = clamp(
+            hpProx * hpLife * hp.strength * 0.85,
+            0,
+            0.94
+          );
+          intensity *= 1 - suppression;
+          radiusKm = Math.max(40, radiusKm * (1 - suppression * 0.45));
+        }
+      }
+
+      if (intensity < 0.14) continue;
 
       const absLat = Math.abs(mid.lat);
       const isSnow =
         (absLat >= 44 && cold.strength >= warm.strength * 0.8) ||
         (absLat >= 32 && cold.strength >= warm.strength * 1.15) ||
-        (absLat >= 25 && cold.strength >= 1.35 && cold.strength > warm.strength);
+        (absLat >= 25 &&
+          cold.strength >= 1.35 &&
+          cold.strength > warm.strength);
 
       fronts.push({
         id: `front-${cold.id}-${warm.id}`,
@@ -400,19 +520,94 @@ interface LocalFieldSample {
   windBoost: number;
   frontFactor: number;
   frontSnowBias: boolean;
+  cycloneInfluence: number;
+  highPressureInfluence: number;
+}
+
+function sampleTerrainWindEffect(
+  lat: number,
+  lng: number,
+  windDirDeg: number | null
+): {
+  foehnWarmingC: number;
+  foehnDryFraction: number;
+  windwardOroBoost: number;
+} {
+  if (windDirDeg === null) {
+    return { foehnWarmingC: 0, foehnDryFraction: 0, windwardOroBoost: 0 };
+  }
+
+  const upwindDir = (windDirDeg + 180) % 360;
+  let maxFoehnWarming = 0;
+  let maxFoehnDry = 0;
+  let maxWindwardOro = 0;
+
+  for (let i = 0; i < HIGH_PEAKS.length; i += 1) {
+    const peak = HIGH_PEAKS[i];
+    if (Math.abs(peak.lat - lat) > 2.2) continue;
+
+    const distKm = haversineKm(peak.lat, peak.lng, lat, lng);
+    if (distKm > FOEHN_SEARCH_RADIUS_KM || distKm < 10) continue;
+
+    const vecDeg = bearingDeg(peak.lat, peak.lng, lat, lng);
+    const elevFactor = clamp((peak.elevation - 2000) / 3000, 0.35, 1);
+
+    // Downwind / leeward side (25–210 km behind the mountain within ±50° of windDirDeg)
+    if (distKm >= 25 && distKm <= 210) {
+      const leeDiff = angularDiffDeg(vecDeg, windDirDeg);
+      if (leeDiff <= 50) {
+        const alignFactor = 1 - (leeDiff / 50) * 0.45;
+        const distFactor =
+          distKm < 55
+            ? clamp((distKm - 25) / 30, 0.25, 1)
+            : clamp(1 - (distKm - 55) / 170, 0.2, 1);
+        const foehnStrength = clamp(
+          alignFactor * distFactor * (0.65 + 0.35 * elevFactor),
+          0,
+          1
+        );
+        const warming = 2.5 + 3.0 * foehnStrength;
+        const dryFrac = 0.4 * foehnStrength;
+
+        if (warming > maxFoehnWarming) maxFoehnWarming = warming;
+        if (dryFrac > maxFoehnDry) maxFoehnDry = dryFrac;
+      }
+    }
+
+    // Upwind / windward side (10–130 km before the mountain)
+    if (distKm >= 10 && distKm <= 130) {
+      const windwardDiff = angularDiffDeg(vecDeg, upwindDir);
+      if (windwardDiff <= 50) {
+        const alignFactor = 1 - (windwardDiff / 50) * 0.4;
+        const distFactor = clamp(1 - (distKm - 10) / 130, 0.25, 1);
+        const boost = 0.35 * alignFactor * distFactor * (0.6 + 0.4 * elevFactor);
+        if (boost > maxWindwardOro) maxWindwardOro = boost;
+      }
+    }
+  }
+
+  return {
+    foehnWarmingC: maxFoehnWarming,
+    foehnDryFraction: maxFoehnDry,
+    windwardOroBoost: maxWindwardOro,
+  };
 }
 
 function sampleFieldAtPoint(
   lat: number,
   lng: number,
   waves: SimWave[],
-  fronts: SimFrontZone[]
+  fronts: SimFrontZone[],
+  windDirDeg: number | null = null
 ): LocalFieldSample {
   let coldDelta = 0;
   let warmDelta = 0;
   let moistureScore = 0;
+  let moistureSuppression = 0;
   let oroScore = 0;
   let windBoost = 0;
+  let cycloneInfluence = 0;
+  let highPressureInfluence = 0;
 
   for (let i = 0; i < waves.length; i += 1) {
     const w = waves[i];
@@ -425,20 +620,47 @@ function sampleFieldAtPoint(
 
     if (w.kind === 'cold') {
       coldDelta += 18 * w.strength * influence;
+      windBoost += (10 + w.strength * 14) * influence;
     } else if (w.kind === 'warm') {
       warmDelta += 16 * w.strength * influence;
+      windBoost += (10 + w.strength * 14) * influence;
+    } else if (w.kind === 'cyclone') {
+      cycloneInfluence = Math.max(
+        cycloneInfluence,
+        clamp(influence * w.strength, 0, 1.5)
+      );
+      windBoost += 38 * influence * clamp(w.strength, 0.6, 1.5);
+    } else if (w.kind === 'high_pressure') {
+      highPressureInfluence = Math.max(
+        highPressureInfluence,
+        clamp(influence * w.strength, 0, 1.5)
+      );
+      moistureSuppression += 0.65 * influence * clamp(w.strength, 0.7, 1.5);
+      warmDelta += 1.2 * influence;
+    } else {
+      windBoost += (10 + w.strength * 12) * influence;
     }
 
-    const moistureContribution =
-      w.moisture * influence * (w.kind === 'moisture' ? 1.15 : 0.75) *
-      (0.75 + w.strength * 0.25);
-    moistureScore = Math.max(
-      moistureScore,
-      moistureContribution
-    ) + Math.min(moistureScore, moistureContribution) * 0.35;
+    if (w.kind !== 'high_pressure') {
+      const moistWeight =
+        w.kind === 'moisture' || w.kind === 'cyclone' || w.lakeEffectActive
+          ? 1.15
+          : 0.75;
+      const moistureContribution =
+        w.moisture *
+        influence *
+        moistWeight *
+        (0.75 + w.strength * 0.25);
+      moistureScore =
+        Math.max(moistureScore, moistureContribution) +
+        Math.min(moistureScore, moistureContribution) * 0.35;
 
-    oroScore = Math.max(oroScore, w.orographicBoost * influence);
-    windBoost += (10 + w.strength * 14) * influence;
+      const dekOroBoost = w.lakeEffectActive ? 0.25 : 0;
+      oroScore = Math.max(
+        oroScore,
+        (w.orographicBoost + dekOroBoost) * influence
+      );
+    }
   }
 
   let frontFactor = 0;
@@ -457,17 +679,49 @@ function sampleFieldAtPoint(
     windBoost += 18 * contribution;
   }
 
+  // High pressure suppresses moisture and front activity
+  if (highPressureInfluence > 0) {
+    frontFactor *= Math.max(0, 1 - highPressureInfluence * 0.9);
+  }
+  moistureScore = Math.max(0, moistureScore - moistureSuppression);
+
+  // Mountain Rain Shadow / Foehn Effect
+  const terrain = sampleTerrainWindEffect(lat, lng, windDirDeg);
+  if (terrain.foehnDryFraction > 0) {
+    moistureScore *= 1 - terrain.foehnDryFraction;
+  }
+  oroScore = clamp(oroScore + terrain.windwardOroBoost, 0, 1);
+
   const cappedCold = Math.min(26, coldDelta);
   const cappedWarm = Math.min(24, warmDelta);
 
   return {
-    tempDelta: cappedWarm - cappedCold - frontFactor * 2.5,
+    tempDelta:
+      cappedWarm - cappedCold - frontFactor * 2.5 + terrain.foehnWarmingC,
     moistureScore: clamp(moistureScore, 0, 1.5),
-    oroScore: clamp(oroScore, 0, 1),
-    windBoost: Math.min(65, windBoost),
+    oroScore,
+    windBoost: Math.min(85, windBoost),
     frontFactor: clamp(frontFactor, 0, 1.5),
     frontSnowBias,
+    cycloneInfluence,
+    highPressureInfluence,
   };
+}
+
+/**
+ * Evaluates simulated temperature (°C) at an arbitrary coordinate and elevation.
+ */
+export function evaluateSimulatedTempAt(
+  lat: number,
+  lng: number,
+  elevationM: number,
+  waves: SimWave[],
+  fronts: SimFrontZone[],
+  season: SimSeason,
+  windDirDeg: number | null = null
+): number {
+  const sample = sampleFieldAtPoint(lat, lng, waves, fronts, windDirDeg);
+  return round1(getBaselineTemp(lat, elevationM, season) + sample.tempDelta);
 }
 
 function computeApparentTemp(
@@ -493,11 +747,23 @@ function resolveSimulatedWmoCode(
   sample: LocalFieldSample,
   elevationBoost = 0
 ): number {
+  if (
+    sample.highPressureInfluence >= 0.35 &&
+    sample.cycloneInfluence < 0.35
+  ) {
+    return 0;
+  }
+
   const effectiveWetness =
     sample.moistureScore +
     sample.oroScore * 0.4 +
     sample.frontFactor * 0.55 +
     elevationBoost;
+
+  if (sample.cycloneInfluence >= 0.38) {
+    if (tempC <= 0) return 73;
+    return 95;
+  }
 
   if (
     sample.frontFactor >= 0.48 ||
@@ -525,41 +791,65 @@ export function applySimulationToCity(
   city: WeatherData,
   waves: SimWave[],
   fronts: SimFrontZone[],
-  season: SimSeason
+  season: SimSeason,
+  windDirDeg: number | null = null
 ): WeatherData {
-  const sample = sampleFieldAtPoint(city.lat, city.lng, waves, fronts);
+  const sample = sampleFieldAtPoint(
+    city.lat,
+    city.lng,
+    waves,
+    fronts,
+    windDirDeg
+  );
   const baseTemp = getBaselineTemp(city.lat, 50, season);
   const temperature = round1(baseTemp + sample.tempDelta);
 
   const seasonalHumidity =
-    season === 'winter'
-      ? 62
-      : season === 'summer'
-        ? 44
-        : 54;
+    season === 'winter' ? 62 : season === 'summer' ? 44 : 54;
   const humidity = Math.round(
     clamp(
       seasonalHumidity +
         sample.moistureScore * 42 +
         sample.oroScore * 16 +
-        sample.frontFactor * 26,
+        sample.frontFactor * 26 -
+        sample.highPressureInfluence * 28,
       15,
       100
     )
   );
 
-  const windSpeed = round1(10 + sample.windBoost);
+  const windSpeed = round1(
+    Math.max(4, 10 + sample.windBoost - sample.highPressureInfluence * 4)
+  );
   const apparentTemperature = computeApparentTemp(
     temperature,
     humidity,
     windSpeed
   );
   const weatherCode = resolveSimulatedWmoCode(temperature, sample);
-  const pressure = Math.round(
+
+  const cycloneDrop =
+    sample.cycloneInfluence > 0
+      ? clamp(sample.cycloneInfluence * 26, 0, 30)
+      : 0;
+  const highPressureRise =
+    sample.highPressureInfluence > 0
+      ? clamp(12 + sample.highPressureInfluence * 10, 0, 22)
+      : 0;
+  const rawPressure =
     1014 -
-      sample.frontFactor * 18 -
-      sample.moistureScore * 8 +
-      (sample.tempDelta < -4 ? 6 : 0)
+    sample.frontFactor * 16 -
+    sample.moistureScore * 6 -
+    cycloneDrop +
+    highPressureRise +
+    (sample.tempDelta < -4 ? 4 : 0);
+
+  const pressure = Math.round(
+    sample.cycloneInfluence >= 0.38
+      ? clamp(rawPressure, 978, 995)
+      : sample.highPressureInfluence >= 0.35
+        ? clamp(rawPressure, 1026, 1036)
+        : clamp(rawPressure, 976, 1040)
   );
 
   return {
@@ -582,10 +872,17 @@ export function applySimulationToPeak(
   waves: SimWave[],
   fronts: SimFrontZone[],
   season: SimSeason,
-  dtSec: number
+  dtSec: number,
+  windDirDeg: number | null = null
 ): PeakDisplayItem {
   const { peak, weather } = item;
-  const sample = sampleFieldAtPoint(peak.lat, peak.lng, waves, fronts);
+  const sample = sampleFieldAtPoint(
+    peak.lat,
+    peak.lng,
+    waves,
+    fronts,
+    windDirDeg
+  );
   const baseTemp = getBaselineTemp(peak.lat, peak.elevation, season);
   const temperature = round1(baseTemp + sample.tempDelta);
 
@@ -596,14 +893,21 @@ export function applySimulationToPeak(
         elevationCondensation * 40 +
         sample.moistureScore * 42 +
         sample.oroScore * 20 +
-        sample.frontFactor * 25,
+        sample.frontFactor * 25 -
+        sample.highPressureInfluence * 28,
       18,
       100
     )
   );
 
   const windSpeed = round1(
-    16 + (peak.elevation / 1000) * 3.5 + sample.windBoost * 1.15
+    Math.max(
+      6,
+      16 +
+        (peak.elevation / 1000) * 3.5 +
+        sample.windBoost * 1.15 -
+        sample.highPressureInfluence * 5
+    )
   );
   const apparentTemperature = computeApparentTemp(
     temperature,
@@ -639,8 +943,10 @@ export function applySimulationToPeak(
   }
 
   const pressure = Math.round(
-    1013 * Math.pow(1 - (2.25577e-5 * peak.elevation), 5.25588) -
-      sample.frontFactor * 12
+    1013 * Math.pow(1 - 2.25577e-5 * peak.elevation, 5.25588) -
+      sample.frontFactor * 12 -
+      sample.cycloneInfluence * 18 +
+      sample.highPressureInfluence * 14
   );
 
   const nextWeather: WeatherData = weather
@@ -723,10 +1029,10 @@ function buildGeodesicCircleRing(
 function offsetCenter(
   lat: number,
   lng: number,
-  bearingDeg: number,
+  bearingDegVal: number,
   distKm: number
 ): { lat: number; lng: number } {
-  const rad = bearingDeg * DEG_TO_RAD;
+  const rad = bearingDegVal * DEG_TO_RAD;
   const dLat = (distKm * Math.cos(rad)) / 111.32;
   const cosLat = Math.max(0.2, Math.cos(lat * DEG_TO_RAD));
   const dLng = (distKm * Math.sin(rad)) / (111.32 * cosLat);
@@ -743,7 +1049,8 @@ function offsetCenter(
 export function buildSimulatorGeoJson(
   waves: SimWave[],
   fronts: SimFrontZone[],
-  season: SimSeason = 'winter'
+  season: SimSeason = 'winter',
+  windDirDeg: number | null = null
 ): {
   wavesGeoJson: GeoJSON.FeatureCollection;
   cloudsGeoJson: GeoJSON.FeatureCollection;
@@ -754,8 +1061,15 @@ export function buildSimulatorGeoJson(
   const precipFeatures: GeoJSON.Feature[] = [];
 
   const getLocalSimTemp = (lat: number, lng: number, elevM = 100): number => {
-    const sample = sampleFieldAtPoint(lat, lng, waves, fronts);
-    return getBaselineTemp(lat, elevM, season) + sample.tempDelta;
+    return evaluateSimulatedTempAt(
+      lat,
+      lng,
+      elevM,
+      waves,
+      fronts,
+      season,
+      windDirDeg
+    );
   };
 
   for (let i = 0; i < waves.length; i += 1) {
@@ -777,6 +1091,8 @@ export function buildSimulatorGeoJson(
         coordinates: [buildGeodesicCircleRing(w.lng, w.lat, w.radiusKm, 32)],
       },
     });
+
+    if (w.kind === 'high_pressure') continue;
 
     // Cloud clusters driven by moisture + orographic lift
     const cloudStrength = clamp(
@@ -828,6 +1144,8 @@ export function buildSimulatorGeoJson(
     if (
       w.withMoisture ||
       w.moisture >= 0.46 ||
+      w.kind === 'cyclone' ||
+      w.lakeEffectActive ||
       precipIntensity >= 0.65
     ) {
       const subPatches = [
@@ -845,7 +1163,12 @@ export function buildSimulatorGeoJson(
             ? { lat: w.lat, lng: w.lng }
             : offsetCenter(w.lat, w.lng, p.bearing, w.radiusKm * p.distFrac);
         const localTemp = getLocalSimTemp(pt.lat, pt.lng, 120);
-        const precipKind: 'snow' | 'rain' = localTemp <= 0 ? 'snow' : 'rain';
+        const precipKind: 'snow' | 'rain' | 'storm' =
+          w.kind === 'cyclone' && localTemp > 0
+            ? 'storm'
+            : localTemp <= 0
+              ? 'snow'
+              : 'rain';
 
         precipFeatures.push({
           type: 'Feature',

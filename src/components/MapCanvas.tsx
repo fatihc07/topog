@@ -1,9 +1,14 @@
-import { useEffect, useImperativeHandle, useRef, forwardRef } from 'react';
+import {
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  forwardRef,
+} from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { BASE_LAYERS, buildInitialStyle } from '../config/layers';
 import { registerCloudProtocol } from '../services/cloudProtocol';
-import { buildSimulatorGeoJson } from '../services/simulatorEngine';
 import { buildNightPolygonGeoJson } from '../services/solarService';
 import { getWeatherMeta } from '../services/weatherService';
 import type { BaseLayerId, FlyTarget, TelemetryState } from '../types/map';
@@ -19,6 +24,7 @@ import type {
   ViewportBounds,
   WeatherData,
 } from '../types/weather';
+import { SimulatorCanvasOverlay } from './SimulatorCanvasOverlay';
 import { getAnimatedWeatherSvg } from './WeatherIcon';
 
 export interface MapCanvasHandle {
@@ -33,6 +39,9 @@ interface MapCanvasProps {
   simWaves: SimWave[];
   simFronts: SimFrontZone[];
   simSeason: SimSeason;
+  simWindDirDeg: number | null;
+  simShowHeatmap: boolean;
+  simPlaying: boolean;
   activeLayer: BaseLayerId;
   terrain3D: boolean;
   exaggeration: number;
@@ -70,6 +79,9 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
       simWaves,
       simFronts,
       simSeason,
+      simWindDirDeg,
+      simShowHeatmap,
+      simPlaying,
       activeLayer,
       terrain3D,
       exaggeration,
@@ -103,6 +115,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
   ) {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const mapRef = useRef<maplibregl.Map | null>(null);
+    const [mapInstance, setMapInstance] = useState<maplibregl.Map | null>(null);
     const markerRef = useRef<maplibregl.Marker | null>(null);
     const weatherMarkersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
     const peakMarkersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
@@ -232,6 +245,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
 
       map.on('load', () => {
         isLoadedRef.current = true;
+        setMapInstance(map);
         if (map.getLayer('clouds-overlay')) {
           map.setLayoutProperty(
             'clouds-overlay',
@@ -280,6 +294,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
         }
         peakMarkersRef.current.clear();
         mountedRadarIdsRef.current.clear();
+        setMapInstance(null);
         map.remove();
         mapRef.current = null;
         isLoadedRef.current = false;
@@ -386,7 +401,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
       }
     }, [globeMode]);
 
-    // Sync Simulator overlay GeoJSON layers & cursor
+    // Sync Simulator cursor & keep legacy GeoJSON overlay layers hidden (rendered on SimulatorCanvasOverlay)
     useEffect(() => {
       const map = mapRef.current;
       if (!map) return;
@@ -395,7 +410,6 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
 
       if (!isLoadedRef.current) return;
 
-      const simVis = appMode === 'simulator' ? 'visible' : 'none';
       const simLayerIds = [
         'sim-waves-fill',
         'sim-waves-line',
@@ -404,24 +418,10 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
       ];
       for (const lid of simLayerIds) {
         if (map.getLayer(lid)) {
-          map.setLayoutProperty(lid, 'visibility', simVis);
+          map.setLayoutProperty(lid, 'visibility', 'none');
         }
       }
-
-      if (appMode !== 'simulator') return;
-
-      const { wavesGeoJson, cloudsGeoJson, precipGeoJson } =
-        buildSimulatorGeoJson(simWaves, simFronts, simSeason);
-      (map.getSource('sim-waves') as maplibregl.GeoJSONSource | undefined)?.setData(
-        wavesGeoJson
-      );
-      (map.getSource('sim-clouds') as maplibregl.GeoJSONSource | undefined)?.setData(
-        cloudsGeoJson
-      );
-      (map.getSource('sim-precip') as maplibregl.GeoJSONSource | undefined)?.setData(
-        precipGeoJson
-      );
-    }, [appMode, simWaves, simFronts, simSeason]);
+    }, [appMode]);
 
     // Sync NASA GIBS / SSEC RealEarth Cloud Cover overlay (hidden in simulator mode)
     useEffect(() => {
@@ -768,6 +768,20 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
       }
     }, [appMode, peakItems, selectedPeakId]);
 
-    return <div ref={containerRef} className="map-container" />;
+    return (
+      <>
+        <div ref={containerRef} className="map-container" />
+        <SimulatorCanvasOverlay
+          map={mapInstance}
+          active={appMode === 'simulator'}
+          waves={simWaves}
+          fronts={simFronts}
+          season={simSeason}
+          windDirDeg={simWindDirDeg}
+          showHeatmap={simShowHeatmap}
+          playing={simPlaying}
+        />
+      </>
+    );
   }
 );

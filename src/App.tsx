@@ -55,7 +55,10 @@ import type {
 import type {
   AppMode,
   SimFrontZone,
+  SimHistoryPoint,
+  SimScenario,
   SimSeason,
+  SimSystemTool,
   SimWave,
   SimWaveKind,
 } from './types/simulator';
@@ -77,8 +80,9 @@ export default function App() {
   const lastBoundsRef = useRef<ViewportBounds | null>(null);
 
   const [appMode, setAppMode] = useState<AppMode>('live');
-  const [simThermal, setSimThermal] = useState<'cold' | 'warm' | null>('cold');
+  const [simSystemTool, setSimSystemTool] = useState<SimSystemTool>('cold');
   const [simMoisture, setSimMoisture] = useState(true);
+  const [simShowHeatmap, setSimShowHeatmap] = useState(true);
   const [simIntensity, setSimIntensity] = useState(1.0);
   const [simWindDir, setSimWindDir] = useState<number | null>(90);
   const [simPlaying, setSimPlaying] = useState(true);
@@ -89,6 +93,9 @@ export default function App() {
   const [simBounds, setSimBounds] = useState<ViewportBounds | null>(null);
   const [simSnowMap, setSimSnowMap] = useState<Record<string, number>>({});
   const simSnowRef = useRef<Record<string, number>>({});
+  const [simHistoryMap, setSimHistoryMap] = useState<
+    Record<string, SimHistoryPoint[]>
+  >({});
 
   const [activeLayer, setActiveLayer] = useState<BaseLayerId>('opentopomap');
   const [terrain3D, setTerrain3D] = useState(false);
@@ -431,7 +438,8 @@ export default function App() {
                 nextWaves,
                 nextFronts,
                 simSeason,
-                dtSec * simSpeed
+                dtSec * simSpeed,
+                simWindDir
               );
               const val = updated.weather?.snowDepthCm ?? 0;
               if (val !== curSnow) {
@@ -485,12 +493,11 @@ export default function App() {
     [syncWeatherForBounds, syncPeaksForBounds, weatherEnabled, peaksEnabled]
   );
 
-  const handleToggleSimThermal = useCallback(
-    (kind: 'cold' | 'warm') => {
-      setSimThermal((prev) => {
+  const handleToggleSimSystem = useCallback(
+    (kind: 'cold' | 'warm' | 'cyclone' | 'high_pressure') => {
+      setSimSystemTool((prev) => {
         if (prev === kind) {
-          // Keep at least one tool active (if moisture is off, keep this thermal tool on)
-          return simMoisture ? null : kind;
+          return simMoisture && kind !== 'high_pressure' ? null : kind;
         }
         return kind;
       });
@@ -500,22 +507,24 @@ export default function App() {
 
   const handleToggleSimMoisture = useCallback(() => {
     setSimMoisture((prev) => {
-      if (prev && simThermal === null) {
-        return true; // Ensure at least moisture or a thermal wave stays active
+      if (prev && simSystemTool === null) {
+        return true;
       }
       return !prev;
     });
-  }, [simThermal]);
+  }, [simSystemTool]);
 
   const handleLaunchSimWave = useCallback(
     (lng: number, lat: number) => {
-      const waveKind: SimWaveKind = simThermal ?? 'moisture';
+      const waveKind: SimWaveKind = simSystemTool ?? 'moisture';
+      const withMoist =
+        waveKind === 'high_pressure' ? false : simMoisture;
       const wave = createSimWave(
         waveKind,
         lng,
         lat,
         simIntensity,
-        simMoisture
+        withMoist
       );
       setSimWaves((prev) => {
         const nextWaves = [...prev.slice(-14), wave];
@@ -525,14 +534,45 @@ export default function App() {
       });
       setSimPlaying(true);
     },
-    [simThermal, simMoisture, simIntensity, simWindDir, simSpeed]
+    [simSystemTool, simMoisture, simIntensity, simWindDir, simSpeed]
   );
+
+  const handleSelectScenario = useCallback((scenario: SimScenario) => {
+    setSimSeason(scenario.season);
+    setSimWindDir(scenario.windDirDeg);
+    simSnowRef.current = {};
+    setSimSnowMap({});
+    setSimHistoryMap({});
+
+    const spawned = scenario.waves.map((w) =>
+      createSimWave(w.kind, w.lng, w.lat, w.strength, w.withMoisture)
+    );
+    const { waves: steppedWaves, fronts } = stepSimulation(
+      spawned,
+      0.5,
+      scenario.windDirDeg,
+      1
+    );
+    setSimWaves(steppedWaves);
+    setSimFronts(fronts);
+    setSimPlaying(true);
+
+    setFlyTarget({
+      lng: scenario.camera.lng,
+      lat: scenario.camera.lat,
+      zoom: scenario.camera.zoom,
+      pitch: 0,
+      bearing: 0,
+      timestamp: Date.now(),
+    });
+  }, []);
 
   const handleClearSimWaves = useCallback(() => {
     setSimWaves([]);
     setSimFronts([]);
     simSnowRef.current = {};
     setSimSnowMap({});
+    setSimHistoryMap({});
   }, []);
 
   // Compute displayed weather & peak badges for active mode
@@ -562,10 +602,20 @@ export default function App() {
         },
         simWaves,
         simFronts,
-        simSeason
+        simSeason,
+        simWindDir
       )
     );
-  }, [appMode, weatherItems, weatherEnabled, simBounds, simWaves, simFronts, simSeason]);
+  }, [
+    appMode,
+    weatherItems,
+    weatherEnabled,
+    simBounds,
+    simWaves,
+    simFronts,
+    simSeason,
+    simWindDir,
+  ]);
 
   const displayedPeakItems = useMemo<PeakDisplayItem[]>(() => {
     if (appMode === 'live') return peakItems;
@@ -607,7 +657,8 @@ export default function App() {
         simWaves,
         simFronts,
         simSeason,
-        0
+        0,
+        simWindDir
       );
     });
   }, [
@@ -619,6 +670,7 @@ export default function App() {
     simFronts,
     simSeason,
     simSnowMap,
+    simWindDir,
   ]);
 
   const activeSelectedWeather = useMemo(() => {
@@ -638,6 +690,60 @@ export default function App() {
       selectedPeak
     );
   }, [appMode, selectedPeak, displayedPeakItems]);
+
+  // Sample simulation history points for live sparklines (#8)
+  const latestSimTargetRef = useRef<{
+    id: string;
+    tempC: number;
+    snowDepthCm: number | null;
+  } | null>(null);
+
+  if (appMode === 'simulator') {
+    if (activeSelectedPeak?.weather) {
+      latestSimTargetRef.current = {
+        id: activeSelectedPeak.peak.id,
+        tempC: activeSelectedPeak.weather.temperature,
+        snowDepthCm: activeSelectedPeak.weather.snowDepthCm ?? 0,
+      };
+    } else if (activeSelectedWeather) {
+      latestSimTargetRef.current = {
+        id: activeSelectedWeather.cityId,
+        tempC: activeSelectedWeather.temperature,
+        snowDepthCm: null,
+      };
+    } else {
+      latestSimTargetRef.current = null;
+    }
+  } else {
+    latestSimTargetRef.current = null;
+  }
+
+  const activeSimTargetId = latestSimTargetRef.current?.id ?? null;
+
+  useEffect(() => {
+    if (appMode !== 'simulator' || !activeSimTargetId) return;
+
+    const pushSample = () => {
+      const target = latestSimTargetRef.current;
+      if (!target) return;
+      setSimHistoryMap((prev) => {
+        const list = prev[target.id] ?? [];
+        const nextList: SimHistoryPoint[] = [
+          ...list.slice(-35),
+          {
+            timestamp: Date.now(),
+            tempC: target.tempC,
+            snowDepthCm: target.snowDepthCm,
+          },
+        ];
+        return { ...prev, [target.id]: nextList };
+      });
+    };
+
+    pushSample();
+    const id = window.setInterval(pushSample, 650);
+    return () => window.clearInterval(id);
+  }, [appMode, activeSimTargetId]);
 
   useEffect(() => {
     if (appMode === 'live' && lastBoundsRef.current) {
@@ -886,6 +992,9 @@ export default function App() {
         simWaves={simWaves}
         simFronts={simFronts}
         simSeason={simSeason}
+        simWindDirDeg={simWindDir}
+        simShowHeatmap={simShowHeatmap}
+        simPlaying={simPlaying}
         activeLayer={activeLayer}
         terrain3D={terrain3D}
         exaggeration={exaggeration}
@@ -973,8 +1082,9 @@ export default function App() {
 
       {appMode === 'simulator' ? (
         <SimulatorDock
-          thermalTool={simThermal}
+          systemTool={simSystemTool}
           moistureActive={simMoisture}
+          showHeatmap={simShowHeatmap}
           intensity={simIntensity}
           windDirDeg={simWindDir}
           playing={simPlaying}
@@ -982,8 +1092,10 @@ export default function App() {
           season={simSeason}
           waveCount={simWaves.length}
           frontCount={simFronts.length}
-          onToggleThermal={handleToggleSimThermal}
+          onToggleSystem={handleToggleSimSystem}
           onToggleMoisture={handleToggleSimMoisture}
+          onToggleHeatmap={() => setSimShowHeatmap((prev) => !prev)}
+          onSelectScenario={handleSelectScenario}
           onChangeIntensity={setSimIntensity}
           onChangeWindDir={setSimWindDir}
           onTogglePlay={() => setSimPlaying((prev) => !prev)}
@@ -992,6 +1104,7 @@ export default function App() {
             setSimSeason(s);
             simSnowRef.current = {};
             setSimSnowMap({});
+            setSimHistoryMap({});
           }}
           onClearWaves={handleClearSimWaves}
         />
@@ -1040,6 +1153,11 @@ export default function App() {
           weather={activeSelectedPeak.weather}
           elevationMeters={activeSelectedPeak.peak.elevation}
           isSimulated={appMode === 'simulator'}
+          simHistory={
+            appMode === 'simulator'
+              ? simHistoryMap[activeSelectedPeak.peak.id]
+              : undefined
+          }
           refreshing={refreshingCity}
           onRefresh={(w) => void handleRefreshCityWeather(w)}
           onClose={() => setSelectedPeak(null)}
@@ -1048,6 +1166,11 @@ export default function App() {
         <WeatherDetailCard
           weather={activeSelectedWeather}
           isSimulated={appMode === 'simulator'}
+          simHistory={
+            appMode === 'simulator'
+              ? simHistoryMap[activeSelectedWeather.cityId]
+              : undefined
+          }
           refreshing={refreshingCity}
           onRefresh={(w) => void handleRefreshCityWeather(w)}
           onClose={() => setSelectedWeather(null)}

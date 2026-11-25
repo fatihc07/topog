@@ -7,9 +7,27 @@ export interface ReleaseEntry {
   removed: string[];
 }
 
-export const APP_VERSION = 'T 3.1';
+export const APP_VERSION = 'T 4.0';
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
+  {
+    version: 'T 4.0',
+    date: '2026-11-25',
+    title: 'Simülatör Modu 2.0 — 60 FPS Canvas Atmosfer, DEK, Fön Etkisi, Siklon & Yüksek Basınç ve İzoterm Haritası',
+    added: [
+      '60 FPS Canvas atmosfer motoru eklendi (src/components/SimulatorCanvasOverlay.tsx): organik çok duraklı radyal hava kütleleri, sürüklenen bulut lobları, sıcaklığa duyarlı yağmur/kar parçacıkları ve cephe/siklon şimşekleri.',
+      'Canlı sıcaklık ısı haritası ve Marching Squares 0°C donma sınırı izoterm konturu eklendi.',
+      'Dönen Siklon (L) ve Yüksek Basınç (H) sistem araçları (is-high-pressure UI vurgusu dahil) eklendi (src/components/SimulatorDock.tsx, src/services/simulatorEngine.ts).',
+      'Deniz Etkili Kar (DEK / Lake-Effect Snow): Deniz üzerinden nem toplayan soğuk hava dalgalarının karaya çıktığında kar patlaması oluşturması eklendi.',
+      'Dağ Yağmur Gölgesi ve Fön Etkisi: >= 2000m zirvelerde rüzgar yönüne göre rüzgar üstü yoğuşma ve rüzgar altı ısınma/kuruma simülasyonu eklendi.',
+      '1-tıkla hazır atmosfer senaryoları eklendi (src/services/simulatorScenarios.ts: Sibirya DEK Karı, Sahra Sıcağı, Akdeniz Siklonu, Balkan Cephesi).',
+      'Seçili şehir ve dağ kartında canlı sıcaklık ve kar kalınlığı (cm) zaman serisi grafiği eklendi (src/components/SimHistoryChart.tsx, src/components/WeatherDetailCard.tsx).',
+    ],
+    changed: [
+      'qa-verifier denetimi sonrası .is-high-pressure CSS seçicisi ve SimulatorCanvasOverlay Globe NaN renk koruması düzeltildi.',
+    ],
+    removed: [],
+  },
   {
     version: 'T 3.1',
     date: '2026-11-25',

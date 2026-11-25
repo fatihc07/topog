@@ -7,6 +7,26 @@ Sürüm numaralandırma kuralı: **`T <Büyük>.<Küçük>`**
 
 ---
 
+## [T 4.0] — 2026-11-25
+**Büyük Sürüm — Simülatör Modu 2.0**
+
+### Eklenenler
+- **60 FPS Canvas Atmosfer Motoru** (`src/components/SimulatorCanvasOverlay.tsx`): Organik çok duraklı radyal hava kütleleri, sürüklenen bulut lobları, sıcaklığa duyarlı yağmur/kar parçacıkları ve cephe/siklon şimşekleri.
+- **Canlı Sıcaklık Isı Haritası & 0°C İzoterm Konturu**: Marching Squares algoritması ile canlı `0°C` donma sınırı izoterm çizgisi ve sıcaklık ısı haritası.
+- **Dönen Siklon (`L`) ve Yüksek Basınç (`H`) Sistem Araçları** (`src/components/SimulatorDock.tsx`, `src/services/simulatorEngine.ts`, `src/types/simulator.ts`): Yarımküreye göre dönen alçak basınç siklonu (`L`) ve nemi/cepheyi bastıran yüksek basınç (`H`) sistemleri (`is-high-pressure` UI vurgusu dahil).
+- **Deniz Etkili Kar (DEK / Lake-Effect Snow)**: Deniz üzerinden nem toplayan soğuk hava dalgalarının karaya ulaştığında yoğun kar patlaması oluşturması.
+- **Dağ Yağmur Gölgesi & Fön Etkisi**: `>= 2000m` zirvelerde rüzgar yönüne göre rüzgar üstü yoğuşma ve rüzgar altı ısınma/kuruma fiziği.
+- **1-Tıkla Hazır Atmosfer Senaryoları** (`src/services/simulatorScenarios.ts`): *Sibirya DEK Karı*, *Sahra Sıcağı*, *Akdeniz Siklonu* ve *Balkan Cephesi*.
+- **Canlı Zaman Serisi Grafiği** (`src/components/SimHistoryChart.tsx`, `src/components/WeatherDetailCard.tsx`): Seçili şehir veya dağ kartında canlı sıcaklık ve kar kalınlığı (`cm`) değişim grafiği.
+
+### Yapılanlar / İyileştirmeler
+- `qa-verifier` kontrolleri sonrası `.is-high-pressure` CSS seçicisi ve `SimulatorCanvasOverlay` Globe `NaN` renk koruması düzeltildi (`src/index.css`, `src/components/SimulatorCanvasOverlay.tsx`).
+
+### Çıkarılanlar
+- Bu sürümde kaldırılan bir özellik yoktur.
+
+---
+
 ## [T 3.1] — 2026-11-25
 **Simülatörde Soğuk/Sıcak + Nemli Kombinasyonu ve 0°C Kar/Yağmur Ayrımı**
 

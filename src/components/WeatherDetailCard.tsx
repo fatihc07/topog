@@ -2,13 +2,16 @@ import { useEffect, useState } from 'react';
 import { RefreshCw, X } from 'lucide-react';
 import { WEATHER_CACHE_TTL_MS } from '../services/weatherCache';
 import { getWeatherMeta } from '../services/weatherService';
+import type { SimHistoryPoint } from '../types/simulator';
 import type { WeatherData } from '../types/weather';
+import { SimHistoryChart } from './SimHistoryChart';
 import { WeatherIcon } from './WeatherIcon';
 
 interface WeatherDetailCardProps {
   weather: WeatherData;
   elevationMeters?: number;
   isSimulated?: boolean;
+  simHistory?: SimHistoryPoint[];
   refreshing: boolean;
   onRefresh: (weather: WeatherData) => void;
   onClose: () => void;
@@ -18,6 +21,7 @@ export function WeatherDetailCard({
   weather,
   elevationMeters,
   isSimulated = false,
+  simHistory,
   refreshing,
   onRefresh,
   onClose,
@@ -119,6 +123,13 @@ export function WeatherDetailCard({
           </div>
         )}
       </div>
+
+      {isSimulated && simHistory ? (
+        <SimHistoryChart
+          history={simHistory}
+          isPeak={typeof elevationMeters === 'number'}
+        />
+      ) : null}
 
       <div
         className={`weather-cache-banner ${
