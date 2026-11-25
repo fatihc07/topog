@@ -758,7 +758,13 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
               : item.source === 'cache'
                 ? 'Bellekten'
                 : 'Canlı';
-          btn.title = `${item.cityName}: ${Math.round(item.temperature)}°C · ${meta.label} (${sourceLabel})`;
+          const feelsLike = Number.isFinite(item.apparentTemperature)
+            ? Math.round(item.apparentTemperature)
+            : null;
+          btn.title =
+            appMode === 'live' && feelsLike !== null
+              ? `${item.cityName}: ${Math.round(item.temperature)}°C · Hissedilen: ${feelsLike}°C · ${meta.label} (${sourceLabel})`
+              : `${item.cityName}: ${Math.round(item.temperature)}°C · ${meta.label} (${sourceLabel})`;
           btn.innerHTML = '';
 
           const iconSpan = document.createElement('span');
@@ -778,6 +784,13 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
           tempSpan.textContent = `${Math.round(item.temperature)}°`;
 
           btn.append(iconSpan, nameSpan, tempSpan);
+          if (appMode === 'live' && feelsLike !== null) {
+            const feelsSpan = document.createElement('span');
+            feelsSpan.className = 'weather-badge-feels';
+            feelsSpan.textContent = `H ${feelsLike}°`;
+            feelsSpan.title = `Hissedilen sıcaklık: ${feelsLike}°C`;
+            btn.append(feelsSpan);
+          }
           if (appMode === 'live') {
             const dotSpan = document.createElement('span');
             dotSpan.className = `cache-dot ${

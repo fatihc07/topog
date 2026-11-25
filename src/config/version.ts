@@ -7,9 +7,21 @@ export interface ReleaseEntry {
   removed: string[];
 }
 
-export const APP_VERSION = 'T 4.1';
+export const APP_VERSION = 'T 4.2';
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
+  {
+    version: 'T 4.2',
+    date: '2026-11-25',
+    title: 'Canlı Şehir Rozetlerinde Hissedilen Sıcaklık (H XX°)',
+    added: [
+      'Canlı Atlas modundaki küçük şehir hava durumu rozetlerine gerçek apparentTemperature verisi mevcutken kompakt "H XX°" hissedilen sıcaklık göstergesi (.weather-badge-feels) ve ipucu (tooltip) metni eklendi (src/components/MapCanvas.tsx, src/index.css).',
+    ],
+    changed: [
+      'Hissedilen sıcaklık göstergesi yalnızca gerçek API/önbellek verisi bulunan Canlı Atlas modunda görüntülenir; Simülatör modu izole bırakıldı.',
+    ],
+    removed: [],
+  },
   {
     version: 'T 4.1',
     date: '2026-11-25',

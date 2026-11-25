@@ -7,6 +7,20 @@ Sürüm numaralandırma kuralı: **`T <Büyük>.<Küçük>`**
 
 ---
 
+## [T 4.2] — 2026-11-25
+**Canlı Şehir Rozetlerinde Hissedilen Sıcaklık (`H XX°`)**
+
+### Eklenenler
+- **Canlı Atlas Küçük Şehir Rozetlerinde Hissedilen Sıcaklık**: `src/components/MapCanvas.tsx` içindeki şehir hava durumu etiketlerine yalnızca Canlı Atlas modunda gerçek `apparentTemperature` verisi mevcutken kompakt `H XX°` hissedilen sıcaklık göstergesi (`.weather-badge-feels` — `src/index.css`) ve ipucu (tooltip) metni eklendi.
+
+### Yapılanlar / İyileştirmeler
+- Simülatör modu izole bırakılarak yalnızca gerçek hissedilen sıcaklık verisi olan şehirlerde gösterim sağlandı.
+
+### Çıkarılanlar
+- Bu sürümde kaldırılan bir özellik yoktur.
+
+---
+
 ## [T 4.1] — 2026-11-25
 **Ülke Modu — Etkileşimli Ülke Sınırları, Parlak Vurgu ve Bayraklı Türkçe Ülke Kartı**
 
