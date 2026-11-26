@@ -1,5 +1,6 @@
 export type PrecipMode = 'clear' | 'rain' | 'snow' | 'auto';
 export type ActivePrecipKind = 'none' | 'rain' | 'snow';
+export type CloudStyle = 'cumulus' | 'partly' | 'cirrus' | 'storm';
 
 export interface LivingWorldControls {
   tempC: number;
@@ -7,6 +8,8 @@ export interface LivingWorldControls {
   precipIntensity: number; // 0..1
   windStrength: number; // 0..1
   timeOfDayHours: number; // 0..24
+  cloudStyle: CloudStyle;
+  cloudCoverage: number; // 0..1
 }
 
 export interface LivingWorldSimState {

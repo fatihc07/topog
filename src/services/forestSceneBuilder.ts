@@ -2,12 +2,14 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type {
+  CloudStyle,
   ForestSceneStats,
   LivingWorldControls,
   LivingWorldSimState,
 } from '../types/livingWorld';
 import { createForestTextures } from './forestTextures';
 import {
+  evaluateSunCloudTransmission,
   fbm2D,
   getTerrainHeight,
   getTrailCenterX,
@@ -33,6 +35,7 @@ export interface ForestSceneController {
   resize: (width: number, height: number) => void;
   resetCamera: () => void;
   getStats: () => ForestSceneStats;
+  getSunVisibility: () => number;
   dispose: () => void;
 }
 
@@ -653,8 +656,16 @@ function buildWeatherPointsGeometry(
   return geom;
 }
 
+const CLOUD_STYLE_INDEX: Record<CloudStyle, number> = {
+  cumulus: 0,
+  partly: 1,
+  cirrus: 2,
+  storm: 3,
+};
+
 interface AtmosphereColors {
   sunDir: THREE.Vector3;
+  moonDir: THREE.Vector3;
   sunColor: THREE.Color;
   zenith: THREE.Color;
   horizon: THREE.Color;
@@ -674,6 +685,7 @@ interface AtmosphereColors {
 function computeAtmosphere(
   controls: LivingWorldControls,
   simState: LivingWorldSimState,
+  effectiveCoverage: number,
   out: AtmosphereColors
 ): void {
   const hours = ((controls.timeOfDayHours % 24) + 24) % 24;
@@ -683,8 +695,11 @@ function computeAtmosphere(
 
   // Position sun forward down the misty trail so canopy backlighting and sunbeams shine toward camera
   const rawSunY = sinElev;
-  const sunDirY = rawSunY > -0.05 ? Math.max(rawSunY, 0.08) : Math.max(-rawSunY * 0.55, 0.14);
+  const sunDirY = rawSunY > -0.06 ? Math.max(rawSunY, 0.05) : rawSunY;
   out.sunDir.set(cosAzim * 0.62 - 0.18, sunDirY, -0.74).normalize();
+
+  const moonDirY = rawSunY < 0.06 ? Math.max(-rawSunY * 0.85, 0.09) : -0.25;
+  out.moonDir.set(-cosAzim * 0.52 + 0.16, moonDirY, -0.78).normalize();
 
   const dayFactor = THREE.MathUtils.smoothstep(sinElev, -0.18, 0.35);
   const goldenFactor =
@@ -708,9 +723,11 @@ function computeAtmosphere(
   const goldenSun = new THREE.Color(0xffa45b);
   out.sunColor.copy(nightSun).lerp(daySun, dayFactor).lerp(goldenSun, clampedGolden * 0.85);
 
-  // Overcast & weather mood
+  // Overcast & weather mood (driven by precipitation and heavy storm cloud decks)
   const isPrecip = simState.activePrecipKind !== 'none';
-  const overcast = isPrecip ? Math.min(0.95, 0.35 + controls.precipIntensity * 0.6) : 0;
+  const precipOvercast = isPrecip ? Math.min(0.95, 0.35 + controls.precipIntensity * 0.6) : 0;
+  const cloudMood = controls.cloudStyle === 'storm' ? effectiveCoverage * 0.48 : effectiveCoverage * 0.12;
+  const overcast = Math.max(precipOvercast, cloudMood);
   out.overcast = overcast;
 
   if (overcast > 0.01) {
@@ -725,7 +742,7 @@ function computeAtmosphere(
 
     out.zenith.lerp(stormSky, overcast * 0.85);
     out.horizon.lerp(stormHorizon, overcast * 0.90);
-    out.sunColor.multiplyScalar(1 - overcast * 0.68);
+    out.sunColor.multiplyScalar(1 - overcast * 0.55);
   }
 
   out.hemiSky.copy(out.horizon).lerp(out.zenith, 0.35);
@@ -744,8 +761,8 @@ function computeAtmosphere(
         : 0;
   out.fogDensity = baseFog + precipFog;
 
-  out.mistGlow = dayFactor * (1 - overcast * 0.85);
-  out.dappleStrength = THREE.MathUtils.clamp(dayFactor * (1 - overcast * 0.9), 0, 1);
+  out.mistGlow = dayFactor * (1 - overcast * 0.72);
+  out.dappleStrength = THREE.MathUtils.clamp(dayFactor * (1 - precipOvercast * 0.85), 0, 1);
   out.mistOpacity = THREE.MathUtils.clamp(
     (0.18 + clampedGolden * 0.08 + overcast * 0.08) * (0.25 + 0.75 * dayFactor),
     0.04,
@@ -753,12 +770,12 @@ function computeAtmosphere(
   );
   const morningSunbeamBoost = 1 + Math.exp(-Math.pow((hours - 9.2) / 2.6, 2)) * 0.55;
   out.sunbeamOpacity = THREE.MathUtils.clamp(
-    dayFactor * (1 - overcast * 0.95) * 0.105 * morningSunbeamBoost,
+    dayFactor * (1 - precipOvercast * 0.90) * 0.11 * morningSunbeamBoost,
     0,
-    0.20
+    0.22
   );
 
-  out.stars = THREE.MathUtils.clamp((1 - dayFactor) * (1 - overcast), 0, 1);
+  out.stars = THREE.MathUtils.clamp((1 - dayFactor) * (1 - precipOvercast * 0.85), 0, 1);
   const duskMask = Math.max(
     Math.exp(-Math.pow((hours - 20.3) / 1.9, 2)),
     Math.exp(-Math.pow((hours - 5.1) / 1.4, 2)),
@@ -807,7 +824,7 @@ export function createForestScene(container: HTMLElement): ForestSceneController
     const camX = getTrailCenterX(18) - 0.3;
     const camY = getTerrainHeight(camX, 18) + 1.85;
     const lookX = getTrailCenterX(-12);
-    const lookY = getTerrainHeight(lookX, -12) + 2.6;
+    const lookY = getTerrainHeight(lookX, -12) + 3.1;
     camera.position.set(camX, camY, 18);
     orbit.target.set(lookX, lookY, -12);
     orbit.update();
@@ -1263,6 +1280,7 @@ export function createForestScene(container: HTMLElement): ForestSceneController
 
   const atmosphere: AtmosphereColors = {
     sunDir: new THREE.Vector3(),
+    moonDir: new THREE.Vector3(),
     sunColor: new THREE.Color(),
     zenith: new THREE.Color(),
     horizon: new THREE.Color(),
@@ -1281,7 +1299,10 @@ export function createForestScene(container: HTMLElement): ForestSceneController
 
   const lightingMaterials = [terrainMat, barkMat, canopyMat, grassMat, fernMat, rockMat];
   const dappleMaterials = [terrainMat, grassMat, fernMat, rockMat];
+  const forestLightDir = new THREE.Vector3();
   let elapsedTime = 0;
+  let cloudTime = 0;
+  let smoothedSunTransmission = 1;
 
   const updateCameraWalk = (dtSec: number) => {
     const moveFwd =
@@ -1357,12 +1378,58 @@ export function createForestScene(container: HTMLElement): ForestSceneController
   const update = (dtSec: number, controls: LivingWorldControls, simState: LivingWorldSimState) => {
     const safeDt = Math.min(0.1, Math.max(0, dtSec));
     elapsedTime += safeDt;
+    cloudTime += safeDt * (0.45 + controls.windStrength * 1.85);
+
+    const effectiveCoverage = THREE.MathUtils.clamp(
+      Math.max(controls.cloudCoverage, simState.activePrecipKind === 'none' ? 0 : 0.78),
+      0,
+      1
+    );
+    const styleIndex = CLOUD_STYLE_INDEX[controls.cloudStyle];
 
     updateCameraWalk(safeDt);
-    computeAtmosphere(controls, simState, atmosphere);
+    computeAtmosphere(controls, simState, effectiveCoverage, atmosphere);
+
+    const rawTransmission = evaluateSunCloudTransmission(
+      atmosphere.sunDir.x,
+      atmosphere.sunDir.y,
+      atmosphere.sunDir.z,
+      camera.position.x,
+      camera.position.z,
+      cloudTime,
+      effectiveCoverage,
+      controls.cloudStyle
+    );
+    const transLerp = 1 - Math.exp(-safeDt * 2.5);
+    smoothedSunTransmission = THREE.MathUtils.lerp(
+      smoothedSunTransmission,
+      rawTransmission,
+      transLerp
+    );
+
+    // Modulate sun intensity, canopy dapple, mist forward-scatter, and crepuscular god-rays
+    atmosphere.sunColor.multiplyScalar(0.38 + 0.62 * smoothedSunTransmission);
+    atmosphere.dappleStrength *= smoothedSunTransmission;
+    atmosphere.mistGlow *= 0.25 + 0.75 * smoothedSunTransmission;
+
+    const crepuscularSurge =
+      1 +
+      0.85 *
+        Math.sin(
+          THREE.MathUtils.clamp((smoothedSunTransmission - 0.25) / 0.72, 0, 1) * Math.PI
+        );
+    const overcastBeamFade = THREE.MathUtils.smoothstep(smoothedSunTransmission, 0.12, 0.42);
+    atmosphere.sunbeamOpacity = THREE.MathUtils.clamp(
+      atmosphere.sunbeamOpacity * crepuscularSurge * overcastBeamFade,
+      0,
+      0.24
+    );
+
+    const dayLightBlend = THREE.MathUtils.smoothstep(atmosphere.sunDir.y, -0.02, 0.06);
+    forestLightDir.copy(atmosphere.moonDir).lerp(atmosphere.sunDir, dayLightBlend).normalize();
 
     for (const mat of lightingMaterials) {
-      mat.uniforms.uSunDir.value.copy(atmosphere.sunDir);
+      mat.uniforms.uSunDir.value.copy(forestLightDir);
       mat.uniforms.uSunColor.value.copy(atmosphere.sunColor);
       mat.uniforms.uHemisphereSky.value.copy(atmosphere.hemiSky);
       mat.uniforms.uHemisphereGround.value.copy(atmosphere.hemiGround);
@@ -1371,6 +1438,10 @@ export function createForestScene(container: HTMLElement): ForestSceneController
       mat.uniforms.uMistGlow.value = atmosphere.mistGlow;
       mat.uniforms.uTime.value = elapsedTime;
       mat.uniforms.uWetness.value = simState.wetness;
+      mat.uniforms.uCloudTime.value = cloudTime;
+      mat.uniforms.uCloudCoverage.value = effectiveCoverage;
+      mat.uniforms.uCloudStyle.value = styleIndex;
+      mat.uniforms.uSunTransmission.value = smoothedSunTransmission;
     }
 
     for (const mat of dappleMaterials) {
@@ -1398,7 +1469,7 @@ export function createForestScene(container: HTMLElement): ForestSceneController
 
     mistMat.uniforms.uMistColor.value.copy(atmosphere.fog);
     mistMat.uniforms.uSunColor.value.copy(atmosphere.sunColor);
-    mistMat.uniforms.uSunDir.value.copy(atmosphere.sunDir);
+    mistMat.uniforms.uSunDir.value.copy(forestLightDir);
     mistMat.uniforms.uOpacity.value = atmosphere.mistOpacity;
     mistMat.uniforms.uTime.value = elapsedTime;
 
@@ -1408,12 +1479,17 @@ export function createForestScene(container: HTMLElement): ForestSceneController
     updateSunbeamsOrientation();
 
     skyMat.uniforms.uSunDir.value.copy(atmosphere.sunDir);
+    skyMat.uniforms.uMoonDir.value.copy(atmosphere.moonDir);
     skyMat.uniforms.uSunColor.value.copy(atmosphere.sunColor);
     skyMat.uniforms.uZenithColor.value.copy(atmosphere.zenith);
     skyMat.uniforms.uHorizonColor.value.copy(atmosphere.horizon);
     skyMat.uniforms.uOvercast.value = atmosphere.overcast;
     skyMat.uniforms.uStarsIntensity.value = atmosphere.stars;
     skyMat.uniforms.uTime.value = elapsedTime;
+    skyMat.uniforms.uCloudTime.value = cloudTime;
+    skyMat.uniforms.uCloudCoverage.value = effectiveCoverage;
+    skyMat.uniforms.uCloudStyle.value = styleIndex;
+    skyMat.uniforms.uSunTransmission.value = smoothedSunTransmission;
 
     const snowOpacity =
       simState.activePrecipKind === 'snow' ? Math.min(1, controls.precipIntensity * 1.15) : 0;
@@ -1488,11 +1564,15 @@ export function createForestScene(container: HTMLElement): ForestSceneController
     renderer.dispose();
   };
 
+  const getSunVisibility = (): number =>
+    atmosphere.sunDir.y > 0.02 ? smoothedSunTransmission : 0;
+
   return {
     update,
     resize,
     resetCamera: setInitialCamera,
     getStats,
+    getSunVisibility,
     dispose,
   };
 }

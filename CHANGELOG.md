@@ -7,6 +7,26 @@ Sürüm numaralandırma kuralı: **`T <Büyük>.<Küçük>`**
 
 ---
 
+## [T 6.2] — 2026-11-26
+**Canlı Dünya — Dinamik Skybox, Çok Katmanlı Bulutlar, Güneş Tutulması & Zemin Bulut Gölgeleri**
+
+### Eklenenler
+- **Çok Katmanlı Hareketli Dinamik Skybox** (`src/services/forestShaders.ts` — `createSkyDomeMaterial`, `sampleWorldCloudLayer`):
+  - Rayleigh/Mie atmosfer gradyanı, akşam/gece Ay (`uMoonDir`) ve bulutlarla örtülen yıldızlar, `180 m` ana kümülüs/fırtına katmanı ve `420 m` yüksek ipeksi sirüs (`cirrus`) katmanı.
+  - Kümülüs ve fırtına bulutlarında **4 adımlı yönlü güneş öz-gölgelemesi** (aydınlık krem tepeler, serin mavi-gri alt gövdeler) ve güneş bulut arkasından geçerken **Mie ileri saçılım gümüş kenar parıltısı** (`silver lining`).
+- **Senkronize Güneş-Bulut Geçirgenliği & Zemin Gölgeleri** (`src/types/livingWorld.ts` `CloudStyle`, `src/services/forestWeatherPhysics.ts` `evaluateCloudDensityAt` / `evaluateSunCloudTransmission`, `src/services/forestSceneBuilder.ts` `getSunVisibility`):
+  - GLSL `sampleWorldCloudLayer` ile birebir eşleşen `evaluateSunCloudTransmission` sayesinde skybox'ta bulut güneşin önünden geçerken sahne doğrudan güneş ışığı, güneş benekleri, hüzmeler (crepuscular rays) ve orman zemini/ağaç/eğrelti/kaya bulut gölgeleri (`computeCloudDirectMask`) senkronize şekilde kararır ve tekrar aydınlanır.
+- **Bulut Türü, Bulutluluk & Güneş Durumu HUD'ı** (`src/components/LivingWorldView.tsx`, `src/index.css`):
+  - Kontrol çubuğuna 4 bulut türü (`Kümülüs`, `Parçalı`, `Sirüs`, `Fırtına`) + 5. kaydırıcı `Bulutluluk (%0–%100)` eklendi; sol üst HUD'da anlık güneş tutulma/süzülme yüzdesi (`.world-sun-pill`) gösterilir.
+
+### Yapılanlar / İyileştirmeler
+- `LIVING_WORLD_PRESETS` senaryoları gerçekçi `cloudStyle` ve `cloudCoverage` değerleriyle güncellendi (`forestWeatherPhysics.ts`).
+
+### Çıkarılanlar
+- Bu sürümde kaldırılan bir özellik yoktur.
+
+---
+
 ## [T 6.1] — 2026-11-26
 **Canlı Dünya — Gerçekçi Dallanan Yapraklı Orman, Kıvrımlı Patika, Sis & Işık Hüzmeleri**
 

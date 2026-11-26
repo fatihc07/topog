@@ -7,9 +7,24 @@ export interface ReleaseEntry {
   removed: string[];
 }
 
-export const APP_VERSION = 'T 6.1';
+export const APP_VERSION = 'T 6.2';
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
+  {
+    version: 'T 6.2',
+    date: '2026-11-26',
+    title: 'Canlı Dünya — Dinamik Skybox, Çok Katmanlı Bulutlar, Güneş Tutulması & Zemin Bulut Gölgeleri',
+    added: [
+      'Çok Katmanlı Hareketli Dinamik Skybox (src/services/forestShaders.ts — createSkyDomeMaterial, sampleWorldCloudLayer): Rayleigh/Mie atmosfer gradyanı, akşam/gece Ay (uMoonDir) ve bulutlarla örtülen yıldızlar, 180 m ana kümülüs/fırtına katmanı ve 420 m yüksek ipeksi sirüs (cirrus) katmanı eklendi.',
+      'Kümülüs ve fırtına bulutlarında 4 adımlı yönlü güneş öz-gölgelemesi ve güneş bulut arkasından geçerken Mie ileri saçılım gümüş kenar parıltısı (silver lining) eklendi.',
+      'Senkronize Güneş-Bulut Geçirgenliği & Zemin Gölgeleri (src/types/livingWorld.ts, forestWeatherPhysics.ts, forestSceneBuilder.ts): GLSL sampleWorldCloudLayer ile birebir eşleşen evaluateCloudDensityAt / evaluateSunCloudTransmission sayesinde bulut güneşin önünden geçerken sahne doğrudan güneş ışığı, güneş benekleri, hüzmeler ve zemin/ağaç/eğrelti/kaya bulut gölgeleri (computeCloudDirectMask) senkronize kararır ve aydınlanır.',
+      'Bulut Türü, Bulutluluk & Güneş Durumu HUDı (src/components/LivingWorldView.tsx, src/index.css): Kontrol çubuğuna 4 bulut türü (Kümülüs, Parçalı, Sirüs, Fırtına) + 5. kaydırıcı Bulutluluk (%0–%100) eklendi; sol üst HUDda anlık güneş tutulma/süzülme yüzdesi (.world-sun-pill) gösterilir.',
+    ],
+    changed: [
+      'LIVING_WORLD_PRESETS varsayılan cloudStyle ve cloudCoverage parametreleriyle zenginleştirildi.',
+    ],
+    removed: [],
+  },
   {
     version: 'T 6.1',
     date: '2026-11-26',

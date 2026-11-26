@@ -65,10 +65,84 @@ vec3 applyWoodlandMist(
   fogFactor = clamp(fogFactor, 0.0, 1.0);
 
   // Mie-like forward sun scatter inside the misty forest air
-  float forwardScatter = pow(max(dot(viewDir, sunDir), 0.0), 4.0);
+  float forwardScatter = pow(clamp(dot(viewDir, sunDir), 0.0, 1.0), 4.0);
   vec3 scatteredMist = mix(fogColor, sunColor * 0.92 + fogColor * 0.25, forwardScatter * mistGlow * 0.42);
 
   return mix(color, scatteredMist, fogFactor);
+}
+
+// Synchronized 1:1 with evaluateCloudDensityAt in forestWeatherPhysics.ts
+float sampleWorldCloudLayer(
+  vec2 xz,
+  float cloudTime,
+  float coverage,
+  float cloudStyle,
+  out float cirrusOut
+) {
+  float cov = clamp(coverage, 0.0, 1.0);
+  if (cov <= 0.005) {
+    cirrusOut = 0.0;
+    return 0.0;
+  }
+  float covFade = smoothstep(0.0, 0.06, cov);
+
+  vec2 mainUV = (xz + vec2(cloudTime * 4.5, cloudTime * 2.1)) * 0.0042;
+  float baseNoise = fbm4(mainUV);
+  float detailNoise = fbm4(mainUV * 2.15 + vec2(11.4, -7.3));
+
+  vec2 cirrusUV = vec2(
+    (xz.x + cloudTime * 6.2) * 0.0022 * 0.65,
+    (xz.y + cloudTime * 1.4) * 0.0022 * 1.8
+  );
+  float cirrusWarp = fbm4(cirrusUV * 0.6 + vec2(3.2, -5.1));
+  float cirrusNoise = fbm4(cirrusUV + vec2(cirrusWarp * 0.45, -cirrusWarp * 0.25));
+  float cirrusThresh = mix(0.72, 0.24, cov);
+  float cirrusAlpha = smoothstep(cirrusThresh - 0.08, cirrusThresh + 0.18, cirrusNoise) * covFade;
+  cirrusOut = cirrusAlpha;
+
+  if (cloudStyle > 1.5 && cloudStyle < 2.5) {
+    // 'cirrus' (2)
+    return 0.0;
+  }
+
+  if (cloudStyle >= 2.5) {
+    // 'storm' (3)
+    float stormShape = baseNoise * 0.65 + detailNoise * 0.35;
+    float thresh = mix(0.68, 0.14, cov);
+    float mainDensity = smoothstep(thresh - 0.10, thresh + 0.16, stormShape) * (0.86 + 0.14 * cov) * covFade;
+    return clamp(mainDensity, 0.0, 1.0);
+  }
+
+  float mainShape = baseNoise * 0.72 + detailNoise * 0.28;
+  if (cloudStyle >= 0.5) {
+    // 'partly' (1)
+    float thresh = mix(0.79, 0.30, cov);
+    float mainDensity = smoothstep(thresh - 0.06, thresh + 0.16, mainShape) * 0.88 * covFade;
+    return clamp(mainDensity, 0.0, 1.0);
+  }
+
+  // 'cumulus' (0)
+  float thresh = mix(0.75, 0.22, cov);
+  float mainDensity = smoothstep(thresh - 0.07, thresh + 0.14, mainShape) * covFade;
+  return clamp(mainDensity, 0.0, 1.0);
+}
+
+float computeCloudDirectMask(
+  vec2 worldXZ,
+  vec3 L,
+  float cloudTime,
+  float coverage,
+  float cloudStyle,
+  float sunTransmission
+) {
+  vec2 shadowXZ = worldXZ + (L.xz / max(L.y, 0.20)) * 180.0;
+  float cirrusShadow = 0.0;
+  float mainShadow = sampleWorldCloudLayer(shadowXZ, cloudTime, coverage, cloudStyle, cirrusShadow);
+  float cirrusWeight = cloudStyle > 1.5 && cloudStyle < 2.5
+    ? 0.48
+    : (cloudStyle >= 2.5 ? 0.0 : (cloudStyle >= 0.5 ? 0.24 : 0.12));
+  float cloudShadow = clamp(mainShadow + cirrusShadow * cirrusWeight * (1.0 - mainShadow), 0.0, 1.0);
+  return mix(1.0, 0.22, clamp(cloudShadow * 1.15, 0.0, 1.0)) * mix(0.42, 1.0, clamp(sunTransmission, 0.0, 1.0));
 }
 `;
 
@@ -88,6 +162,10 @@ export function createTerrainMaterial(groundDetailMap: THREE.Texture): THREE.Sha
       uSnowCoverage: { value: 0 },
       uWetness: { value: 0.08 },
       uTime: { value: 0 },
+      uCloudTime: { value: 0 },
+      uCloudCoverage: { value: 0.48 },
+      uCloudStyle: { value: 0 },
+      uSunTransmission: { value: 1 },
     },
     vertexShader: /* glsl */ `
       uniform float uSnowDepth;
@@ -120,6 +198,10 @@ export function createTerrainMaterial(groundDetailMap: THREE.Texture): THREE.Sha
       uniform float uSnowCoverage;
       uniform float uWetness;
       uniform float uTime;
+      uniform float uCloudTime;
+      uniform float uCloudCoverage;
+      uniform float uCloudStyle;
+      uniform float uSunTransmission;
 
       varying vec3 vWorldPos;
       varying vec3 vWorldNormal;
@@ -198,6 +280,8 @@ export function createTerrainMaterial(groundDetailMap: THREE.Texture): THREE.Sha
 
         float NdotL = max(dot(effN, L), 0.0);
         float dapple = computeDappledSun(xz, uTime, trailMask, uDappleStrength);
+        float directMask = computeCloudDirectMask(xz, L, uCloudTime, uCloudCoverage, uCloudStyle, uSunTransmission);
+        float ambientBoost = mix(1.24, 1.0, directMask);
 
         float hemi = 0.5 + 0.5 * effN.y;
         vec3 ambient = mix(uHemisphereGround, uHemisphereSky, hemi);
@@ -206,15 +290,15 @@ export function createTerrainMaterial(groundDetailMap: THREE.Texture): THREE.Sha
 
         vec3 hv = L + V;
         vec3 H = dot(hv, hv) > 1e-6 ? normalize(hv) : effN;
-        float wetSpec = pow(max(dot(effN, H), 0.0), 48.0) * wetAmount * (1.0 - snowMask) * 0.65;
+        float wetSpec = pow(clamp(dot(effN, H), 0.0, 1.0), 48.0) * wetAmount * (1.0 - snowMask) * 0.65;
         float sparkleHash = hash21(floor(xz * 18.0) + floor(V.xz * 6.0));
-        float snowSparkle = step(0.982, sparkleHash) * pow(max(dot(effN, H), 0.0), 18.0) * snowMask * 0.95;
+        float snowSparkle = step(0.982, sparkleHash) * pow(clamp(dot(effN, H), 0.0, 1.0), 18.0) * snowMask * 0.95;
 
         float rim = pow(1.0 - clamp(dot(effN, V), 0.0, 1.0), 3.2) * 0.14;
         vec3 surfaceCol = mix(albedo, snowAlbedo, snowMask);
 
-        vec3 lit = surfaceCol * (effAmbient * 0.64 + uSunColor * NdotL * dapple * 1.05)
-          + uSunColor * (wetSpec * dapple + snowSparkle)
+        vec3 lit = surfaceCol * (effAmbient * 0.64 * ambientBoost + uSunColor * NdotL * dapple * directMask * 1.05)
+          + uSunColor * (wetSpec * dapple + snowSparkle) * directMask
           + uHemisphereSky * rim * (0.30 + 0.70 * snowMask);
 
         lit = applyWoodlandMist(lit, vWorldPos, uFogColor, uFogDensity, L, uSunColor, uMistGlow);
@@ -239,6 +323,10 @@ export function createBarkMaterial(barkMap: THREE.Texture): THREE.ShaderMaterial
       uWindStrength: { value: 0.25 },
       uCanopySnow: { value: 0 },
       uWetness: { value: 0.08 },
+      uCloudTime: { value: 0 },
+      uCloudCoverage: { value: 0.48 },
+      uCloudStyle: { value: 0 },
+      uSunTransmission: { value: 1 },
     },
     vertexShader: /* glsl */ `
       uniform float uTime;
@@ -292,6 +380,10 @@ export function createBarkMaterial(barkMap: THREE.Texture): THREE.ShaderMaterial
       uniform float uMistGlow;
       uniform float uCanopySnow;
       uniform float uWetness;
+      uniform float uCloudTime;
+      uniform float uCloudCoverage;
+      uniform float uCloudStyle;
+      uniform float uSunTransmission;
 
       varying vec3 vWorldPos;
       varying vec3 vWorldNormal;
@@ -329,14 +421,17 @@ export function createBarkMaterial(barkMap: THREE.Texture): THREE.ShaderMaterial
         vec3 albedo = mix(barkCol, vec3(0.88, 0.93, 0.99), snowDust);
 
         float NdotL = max(dot(N, L), 0.0);
+        float directMask = computeCloudDirectMask(vWorldPos.xz, L, uCloudTime, uCloudCoverage, uCloudStyle, uSunTransmission);
+        float ambientBoost = mix(1.24, 1.0, directMask);
         float hemi = 0.5 + 0.5 * N.y;
         vec3 ambient = mix(uHemisphereGround, uHemisphereSky, hemi);
 
         vec3 hv = L + V;
         vec3 H = dot(hv, hv) > 1e-6 ? normalize(hv) : N;
-        float wetSpec = pow(max(dot(N, H), 0.0), 28.0) * uWetness * (1.0 - snowDust) * 0.24;
+        float wetSpec = pow(clamp(dot(N, H), 0.0, 1.0), 28.0) * uWetness * (1.0 - snowDust) * 0.24;
 
-        vec3 lit = albedo * (ambient * 0.62 + uSunColor * NdotL * 0.94) + uSunColor * wetSpec;
+        vec3 lit = albedo * (ambient * 0.62 * ambientBoost + uSunColor * NdotL * directMask * 0.94)
+          + uSunColor * wetSpec * directMask;
         lit = applyWoodlandMist(lit, vWorldPos, uFogColor, uFogDensity, L, uSunColor, uMistGlow);
         gl_FragColor = vec4(lit, 1.0);
       }
@@ -360,6 +455,10 @@ export function createCanopyMaterial(leafClusterMap: THREE.Texture): THREE.Shade
       uWindStrength: { value: 0.25 },
       uCanopySnow: { value: 0 },
       uWetness: { value: 0.08 },
+      uCloudTime: { value: 0 },
+      uCloudCoverage: { value: 0.48 },
+      uCloudStyle: { value: 0 },
+      uSunTransmission: { value: 1 },
     },
     vertexShader: /* glsl */ `
       uniform float uTime;
@@ -421,6 +520,10 @@ export function createCanopyMaterial(leafClusterMap: THREE.Texture): THREE.Shade
       uniform float uMistGlow;
       uniform float uCanopySnow;
       uniform float uWetness;
+      uniform float uCloudTime;
+      uniform float uCloudCoverage;
+      uniform float uCloudStyle;
+      uniform float uSunTransmission;
 
       varying vec3 vWorldPos;
       varying vec3 vWorldNormal;
@@ -455,19 +558,21 @@ export function createCanopyMaterial(leafClusterMap: THREE.Texture): THREE.Shade
 
         // Wrap diffuse + translucent sunlit leaf subsurface scattering
         float wrapDiff = max((dot(softN, L) + 0.45) / 1.45, 0.0);
-        float backLight = pow(max(dot(-V, L), 0.0), 2.8) * max(L.y + 0.2, 0.0) * (1.0 - snowCap * 0.85);
+        float backLight = pow(clamp(dot(-V, L), 0.0, 1.0), 2.8) * max(L.y + 0.2, 0.0) * (1.0 - snowCap * 0.85);
         vec3 sssGlow = foliage * vec3(1.35, 1.55, 0.72) * backLight * 0.52;
 
+        float directMask = computeCloudDirectMask(vWorldPos.xz, L, uCloudTime, uCloudCoverage, uCloudStyle, uSunTransmission);
+        float ambientBoost = mix(1.24, 1.0, directMask);
         float hemi = 0.5 + 0.5 * softN.y;
         vec3 ambient = mix(uHemisphereGround, uHemisphereSky, hemi);
 
         vec3 hv = L + V;
         vec3 H = dot(hv, hv) > 1e-6 ? normalize(hv) : softN;
-        float wetSpec = pow(max(dot(softN, H), 0.0), 26.0) * uWetness * (1.0 - snowCap) * 0.25;
+        float wetSpec = pow(clamp(dot(softN, H), 0.0, 1.0), 26.0) * uWetness * (1.0 - snowCap) * 0.25;
         float rim = pow(1.0 - clamp(dot(softN, V), 0.0, 1.0), 3.0) * 0.14;
 
-        vec3 lit = albedo * (ambient * 0.68 + uSunColor * wrapDiff * 0.95)
-          + uSunColor * (sssGlow + wetSpec)
+        vec3 lit = albedo * (ambient * 0.68 * ambientBoost + uSunColor * wrapDiff * directMask * 0.95)
+          + uSunColor * (sssGlow + wetSpec) * directMask
           + uHemisphereSky * rim * (0.25 + 0.75 * snowCap);
 
         lit = applyWoodlandMist(lit, vWorldPos, uFogColor, uFogDensity, L, uSunColor, uMistGlow);
@@ -495,6 +600,10 @@ export function createGrassMaterial(grassTuftMap: THREE.Texture): THREE.ShaderMa
       uSnowCoverage: { value: 0 },
       uSnowDepth: { value: 0 },
       uWetness: { value: 0.08 },
+      uCloudTime: { value: 0 },
+      uCloudCoverage: { value: 0.48 },
+      uCloudStyle: { value: 0 },
+      uSunTransmission: { value: 1 },
     },
     vertexShader: /* glsl */ `
       uniform float uTime;
@@ -563,6 +672,10 @@ export function createGrassMaterial(grassTuftMap: THREE.Texture): THREE.ShaderMa
       uniform float uTime;
       uniform float uSnowCoverage;
       uniform float uWetness;
+      uniform float uCloudTime;
+      uniform float uCloudCoverage;
+      uniform float uCloudStyle;
+      uniform float uSunTransmission;
 
       varying vec3 vWorldPos;
       varying vec3 vWorldNormal;
@@ -593,17 +706,19 @@ export function createGrassMaterial(grassTuftMap: THREE.Texture): THREE.ShaderMa
         vec3 albedo = mix(bladeCol, vec3(0.91, 0.955, 1.0), snowCoat * 0.92);
 
         float dapple = computeDappledSun(vWorldPos.xz, uTime, 0.0, uDappleStrength);
+        float directMask = computeCloudDirectMask(vWorldPos.xz, L, uCloudTime, uCloudCoverage, uCloudStyle, uSunTransmission);
+        float ambientBoost = mix(1.24, 1.0, directMask);
         float wrapDiff = max((dot(N, L) + 0.45) / 1.45, 0.0);
-        float trans = pow(max(dot(-V, L), 0.0), 2.5) * vUv.y * (1.0 - snowCoat * 0.8) * 0.48;
+        float trans = pow(clamp(dot(-V, L), 0.0, 1.0), 2.5) * vUv.y * (1.0 - snowCoat * 0.8) * 0.48;
         float hemi = 0.5 + 0.5 * N.y;
         vec3 ambient = mix(uHemisphereGround, uHemisphereSky, hemi);
 
         vec3 hv = L + V;
         vec3 H = dot(hv, hv) > 1e-6 ? normalize(hv) : N;
-        float wetSpec = pow(max(dot(N, H), 0.0), 24.0) * uWetness * (1.0 - snowCoat) * 0.28;
+        float wetSpec = pow(clamp(dot(N, H), 0.0, 1.0), 24.0) * uWetness * (1.0 - snowCoat) * 0.28;
 
-        vec3 lit = albedo * (ambient * 0.66 + uSunColor * wrapDiff * dapple * 0.98)
-          + uSunColor * (bladeCol * trans * dapple + wetSpec);
+        vec3 lit = albedo * (ambient * 0.66 * ambientBoost + uSunColor * wrapDiff * dapple * directMask * 0.98)
+          + uSunColor * (bladeCol * trans * dapple + wetSpec) * directMask;
 
         lit = applyWoodlandMist(lit, vWorldPos, uFogColor, uFogDensity, L, uSunColor, uMistGlow);
         gl_FragColor = vec4(lit, 1.0);
@@ -630,6 +745,10 @@ export function createFernMaterial(fernFrondMap: THREE.Texture): THREE.ShaderMat
       uSnowCoverage: { value: 0 },
       uCanopySnow: { value: 0 },
       uWetness: { value: 0.08 },
+      uCloudTime: { value: 0 },
+      uCloudCoverage: { value: 0.48 },
+      uCloudStyle: { value: 0 },
+      uSunTransmission: { value: 1 },
     },
     vertexShader: /* glsl */ `
       uniform float uTime;
@@ -687,6 +806,10 @@ export function createFernMaterial(fernFrondMap: THREE.Texture): THREE.ShaderMat
       uniform float uSnowCoverage;
       uniform float uCanopySnow;
       uniform float uWetness;
+      uniform float uCloudTime;
+      uniform float uCloudCoverage;
+      uniform float uCloudStyle;
+      uniform float uSunTransmission;
 
       varying vec3 vWorldPos;
       varying vec3 vWorldNormal;
@@ -715,17 +838,19 @@ export function createFernMaterial(fernFrondMap: THREE.Texture): THREE.ShaderMat
         vec3 albedo = mix(fernCol, vec3(0.90, 0.95, 1.0), snowMask * 0.90);
 
         float dapple = computeDappledSun(vWorldPos.xz, uTime, 0.0, uDappleStrength);
+        float directMask = computeCloudDirectMask(vWorldPos.xz, L, uCloudTime, uCloudCoverage, uCloudStyle, uSunTransmission);
+        float ambientBoost = mix(1.24, 1.0, directMask);
         float wrapDiff = max((dot(N, L) + 0.42) / 1.42, 0.0);
-        float sss = pow(max(dot(-V, L), 0.0), 2.4) * (1.0 - snowMask * 0.85) * 0.44;
+        float sss = pow(clamp(dot(-V, L), 0.0, 1.0), 2.4) * (1.0 - snowMask * 0.85) * 0.44;
         float hemi = 0.5 + 0.5 * N.y;
         vec3 ambient = mix(uHemisphereGround, uHemisphereSky, hemi);
 
         vec3 hv = L + V;
         vec3 H = dot(hv, hv) > 1e-6 ? normalize(hv) : N;
-        float wetSpec = pow(max(dot(N, H), 0.0), 28.0) * uWetness * (1.0 - snowMask) * 0.25;
+        float wetSpec = pow(clamp(dot(N, H), 0.0, 1.0), 28.0) * uWetness * (1.0 - snowMask) * 0.25;
 
-        vec3 lit = albedo * (ambient * 0.66 + uSunColor * wrapDiff * dapple * 0.96)
-          + uSunColor * (fernCol * sss * dapple + wetSpec);
+        vec3 lit = albedo * (ambient * 0.66 * ambientBoost + uSunColor * wrapDiff * dapple * directMask * 0.96)
+          + uSunColor * (fernCol * sss * dapple + wetSpec) * directMask;
 
         lit = applyWoodlandMist(lit, vWorldPos, uFogColor, uFogDensity, L, uSunColor, uMistGlow);
         gl_FragColor = vec4(lit, 1.0);
@@ -748,6 +873,10 @@ export function createRockMaterial(): THREE.ShaderMaterial {
       uTime: { value: 0 },
       uSnowCoverage: { value: 0 },
       uWetness: { value: 0.08 },
+      uCloudTime: { value: 0 },
+      uCloudCoverage: { value: 0.48 },
+      uCloudStyle: { value: 0 },
+      uSunTransmission: { value: 1 },
     },
     vertexShader: /* glsl */ `
       varying vec3 vWorldPos;
@@ -785,6 +914,10 @@ export function createRockMaterial(): THREE.ShaderMaterial {
       uniform float uTime;
       uniform float uSnowCoverage;
       uniform float uWetness;
+      uniform float uCloudTime;
+      uniform float uCloudCoverage;
+      uniform float uCloudStyle;
+      uniform float uSunTransmission;
 
       varying vec3 vWorldPos;
       varying vec3 vWorldNormal;
@@ -816,19 +949,21 @@ export function createRockMaterial(): THREE.ShaderMaterial {
         vec3 albedo = mix(baseCol, vec3(0.93, 0.965, 1.0), snowCap);
 
         float dapple = computeDappledSun(vWorldPos.xz, uTime, 0.12, uDappleStrength);
+        float directMask = computeCloudDirectMask(vWorldPos.xz, L, uCloudTime, uCloudCoverage, uCloudStyle, uSunTransmission);
+        float ambientBoost = mix(1.24, 1.0, directMask);
         float NdotL = max(dot(N, L), 0.0);
         float hemi = 0.5 + 0.5 * N.y;
         vec3 ambient = mix(uHemisphereGround, uHemisphereSky, hemi);
 
         vec3 hv = L + V;
         vec3 H = dot(hv, hv) > 1e-6 ? normalize(hv) : N;
-        float wetSpec = pow(max(dot(N, H), 0.0), 38.0) * uWetness * (1.0 - snowCap) * 0.45;
+        float wetSpec = pow(clamp(dot(N, H), 0.0, 1.0), 38.0) * uWetness * (1.0 - snowCap) * 0.45;
         // Soft velvety sheen on moss edges
         float mossRim = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 2.5) * mossMask * (1.0 - snowCap) * 0.18;
 
-        vec3 lit = albedo * (ambient * 0.64 + uSunColor * NdotL * dapple * 0.98)
-          + uSunColor * wetSpec * dapple
-          + uSunColor * mossRim * 0.4;
+        vec3 lit = albedo * (ambient * 0.64 * ambientBoost + uSunColor * NdotL * dapple * directMask * 0.98)
+          + uSunColor * wetSpec * dapple * directMask
+          + uSunColor * mossRim * 0.4 * directMask;
 
         lit = applyWoodlandMist(lit, vWorldPos, uFogColor, uFogDensity, L, uSunColor, uMistGlow);
         gl_FragColor = vec4(lit, 1.0);
@@ -967,12 +1102,17 @@ export function createSkyDomeMaterial(): THREE.ShaderMaterial {
     depthWrite: false,
     uniforms: {
       uSunDir: { value: new THREE.Vector3(0.45, 0.72, -0.52).normalize() },
+      uMoonDir: { value: new THREE.Vector3(-0.32, 0.48, -0.78).normalize() },
       uSunColor: { value: new THREE.Color(0xfff1d6) },
       uZenithColor: { value: new THREE.Color(0x527fa3) },
       uHorizonColor: { value: new THREE.Color(0xcdd6c5) },
       uOvercast: { value: 0 },
       uStarsIntensity: { value: 0 },
       uTime: { value: 0 },
+      uCloudTime: { value: 0 },
+      uCloudCoverage: { value: 0.48 },
+      uCloudStyle: { value: 0 },
+      uSunTransmission: { value: 1 },
     },
     vertexShader: /* glsl */ `
       varying vec3 vDir;
@@ -983,12 +1123,17 @@ export function createSkyDomeMaterial(): THREE.ShaderMaterial {
     `,
     fragmentShader: /* glsl */ `
       uniform vec3 uSunDir;
+      uniform vec3 uMoonDir;
       uniform vec3 uSunColor;
       uniform vec3 uZenithColor;
       uniform vec3 uHorizonColor;
       uniform float uOvercast;
       uniform float uStarsIntensity;
       uniform float uTime;
+      uniform float uCloudTime;
+      uniform float uCloudCoverage;
+      uniform float uCloudStyle;
+      uniform float uSunTransmission;
 
       varying vec3 vDir;
 
@@ -997,27 +1142,125 @@ export function createSkyDomeMaterial(): THREE.ShaderMaterial {
       void main() {
         vec3 dir = safeNormalize(vDir, vec3(0.0, 1.0, 0.0));
         vec3 L = safeNormalize(uSunDir, vec3(0.0, 1.0, 0.0));
+        vec3 M = safeNormalize(uMoonDir, vec3(-0.32, 0.48, -0.78));
         float up = clamp(dir.y, 0.0, 1.0);
 
-        vec3 sky = mix(uHorizonColor, uZenithColor, pow(up, 0.52));
+        // Physically-inspired Rayleigh + Mie sky gradient
+        vec3 sky = mix(uHorizonColor, uZenithColor, pow(up, 0.50));
 
-        vec2 cloudUv = dir.xz / (max(dir.y, 0.14)) * 1.4 + vec2(uTime * 0.012, uTime * 0.006);
-        float cloud = fbm4(cloudUv);
-        float cloudMask = smoothstep(0.45 - uOvercast * 0.35, 0.82 - uOvercast * 0.25, cloud) * smoothstep(0.02, 0.35, up);
-        vec3 cloudCol = mix(uHorizonColor * 1.04, uHorizonColor * 0.85, uOvercast);
-        sky = mix(sky, cloudCol, cloudMask * (0.35 + 0.55 * uOvercast));
+        // Warm horizon scattering band near sun azimuth
+        vec2 dirHoriz = safeNormalize(vec3(dir.x, 0.0, dir.z), vec3(0.0, 0.0, -1.0)).xz;
+        vec2 sunHoriz = safeNormalize(vec3(L.x, 0.0, L.z), vec3(0.0, 0.0, -1.0)).xz;
+        float azimAlign = clamp(dot(dirHoriz, sunHoriz), 0.0, 1.0);
+        float horizonBand = exp(-up * 6.0) * smoothstep(-0.18, 0.35, L.y);
+        vec3 warmScatter = mix(uHorizonColor, uSunColor * 1.05 + vec3(0.18, 0.08, 0.02), 0.58);
+        sky = mix(
+          sky,
+          warmScatter,
+          horizonBand * (0.22 + 0.55 * pow(azimAlign, 2.5)) * (1.0 - uOvercast * 0.72)
+        );
 
-        float sunDot = max(dot(dir, L), 0.0);
-        float sunVis = (1.0 - uOvercast * 0.88) * smoothstep(-0.08, 0.12, L.y);
-        sky += uSunColor * pow(sunDot, 10.0) * 0.42 * sunVis;
-        sky += uSunColor * smoothstep(0.9982, 0.9995, sunDot) * 1.7 * sunVis;
+        float sunDot = clamp(dot(dir, L), 0.0, 1.0);
+        float sunAbove = smoothstep(-0.04, 0.08, L.y);
+        float dayMask = (1.0 - clamp(uStarsIntensity, 0.0, 1.0) * 0.95) * sunAbove;
 
-        if (uStarsIntensity > 0.01 && dir.y > 0.04) {
-          vec2 starGrid = floor(dir.xz / (dir.y + 0.4) * 180.0);
+        // Broad atmospheric Mie glow in clear sky
+        sky += uSunColor * pow(sunDot, 5.0) * 0.22 * dayMask * (1.0 - uOvercast * 0.65);
+
+        // Multi-layer world-space cloud projection (420m high cirrus, 180m main cumulus/storm)
+        float horizonFade = smoothstep(0.015, 0.24, up);
+        vec2 cirrusXZ = cameraPosition.xz + dir.xz * (420.0 / max(dir.y, 0.06));
+        vec2 mainXZ = cameraPosition.xz + dir.xz * (180.0 / max(dir.y, 0.06));
+
+        float cirrusRaw = 0.0;
+        sampleWorldCloudLayer(cirrusXZ, uCloudTime, uCloudCoverage, uCloudStyle, cirrusRaw);
+        float cirrusWeight = uCloudStyle > 1.5 && uCloudStyle < 2.5
+          ? 0.58
+          : (uCloudStyle >= 2.5 ? 0.0 : (uCloudStyle >= 0.5 ? 0.30 : 0.16));
+        float cirrusDensity = clamp(cirrusRaw * cirrusWeight, 0.0, 1.0) * horizonFade;
+
+        float unusedCirrus = 0.0;
+        float mainDensity = sampleWorldCloudLayer(mainXZ, uCloudTime, uCloudCoverage, uCloudStyle, unusedCirrus) * horizonFade;
+        float maxCloud = clamp(max(mainDensity, cirrusDensity * 0.75), 0.0, 1.0);
+
+        // Twinkling stars at dusk/night in clear gaps
+        if (uStarsIntensity > 0.01 && dir.y > 0.03) {
+          vec2 starGrid = floor(dir.xz / (dir.y + 0.35) * 195.0);
           float starVal = hash21(starGrid);
-          float twinkle = 0.65 + 0.35 * sin(uTime * 2.5 + starVal * 40.0);
-          float star = step(0.9965, starVal) * twinkle * smoothstep(0.04, 0.28, dir.y) * (1.0 - uOvercast);
-          sky += vec3(0.85, 0.92, 1.0) * star * uStarsIntensity;
+          float twinkle = 0.62 + 0.38 * sin(uTime * 2.6 + starVal * 43.0);
+          float star = step(0.9962, starVal) * twinkle * smoothstep(0.03, 0.28, dir.y) * (1.0 - maxCloud);
+          sky += vec3(0.86, 0.93, 1.0) * star * uStarsIntensity * 1.15;
+        }
+
+        // Crisp crescent/soft Moon glow at night behind clouds
+        float moonAbove = smoothstep(-0.02, 0.14, M.y);
+        if (moonAbove > 0.01 && uStarsIntensity > 0.05) {
+          float moonDot = clamp(dot(dir, M), 0.0, 1.0);
+          float moonOcclude = clamp(1.0 - mainDensity * 0.92 - cirrusDensity * 0.40, 0.0, 1.0);
+          float moonDisc = smoothstep(0.9991, 0.99965, moonDot);
+          vec3 crescentOffset = safeNormalize(M + vec3(0.016, 0.011, 0.0), M);
+          float crescentCut = smoothstep(0.9990, 0.99955, clamp(dot(dir, crescentOffset), 0.0, 1.0));
+          float crescent = clamp(moonDisc - crescentCut * 0.88, 0.0, 1.0);
+          float moonHalo = pow(moonDot, 24.0) * 0.26 + pow(moonDot, 160.0) * 0.42;
+          vec3 moonCol = vec3(0.84, 0.91, 1.0);
+          sky += moonCol * (moonHalo + crescent * 1.85) * moonAbove * uStarsIntensity * moonOcclude;
+        }
+
+        // Solar disc + aureole modulated directly by cloud density along ray dir
+        float solarCloudOcclusion = clamp(1.0 - mainDensity * 0.94 - cirrusDensity * 0.45, 0.0, 1.0);
+        float aureole = pow(sunDot, 16.0) * 0.48 + pow(sunDot, 96.0) * 0.65;
+        float solarDisc = smoothstep(0.9985, 0.99955, sunDot) * 2.4;
+        sky += uSunColor * (aureole + solarDisc) * dayMask * solarCloudOcclusion;
+
+        // High Cirrus clouds (420m)
+        if (cirrusDensity > 0.002) {
+          vec3 cirrusBase = mix(uHorizonColor * 1.06, vec3(0.96, 0.97, 1.0), 0.45 * dayMask);
+          vec3 cirrusLit = mix(
+            cirrusBase,
+            uSunColor * 1.08 + vec3(0.12),
+            0.35 * dayMask + 0.35 * pow(sunDot, 4.0) * dayMask
+          );
+          if (uStarsIntensity > 0.05) {
+            cirrusLit = mix(cirrusLit, vec3(0.16, 0.22, 0.34), uStarsIntensity * 0.78);
+          }
+          sky = mix(sky, cirrusLit, cirrusDensity * 0.82);
+        }
+
+        // Main Cumulus / Storm layer (180m) with 4-tap directional sun self-shadowing + Mie silver lining
+        if (mainDensity > 0.002) {
+          vec3 lightDirRef = dayMask > 0.05 ? L : M;
+          vec2 marchStep = (lightDirRef.xz / max(lightDirRef.y, 0.24)) * 11.0;
+          float opticalDepth = 0.0;
+          float dummyC = 0.0;
+          for (int i = 1; i <= 4; i++) {
+            float fi = float(i);
+            vec2 tapXZ = mainXZ + marchStep * fi;
+            float tapD = sampleWorldCloudLayer(tapXZ, uCloudTime, uCloudCoverage, uCloudStyle, dummyC);
+            opticalDepth += tapD * (0.42 - fi * 0.06);
+          }
+          float sunLit = exp(-opticalDepth * 1.55);
+
+          float isStorm = smoothstep(2.2, 3.0, uCloudStyle);
+          vec3 dayTop = mix(uHorizonColor * 0.95, uSunColor * 1.10 + vec3(0.16, 0.14, 0.10), 0.62);
+          dayTop = mix(dayTop, mix(uHorizonColor * 0.82, vec3(0.58, 0.64, 0.72), 0.45), isStorm * 0.62);
+
+          vec3 dayBelly = mix(uHorizonColor * 0.66, vec3(0.32, 0.40, 0.52), 0.52);
+          dayBelly = mix(dayBelly, vec3(0.18, 0.23, 0.30), isStorm * 0.68);
+
+          vec3 nightCloud = mix(vec3(0.06, 0.10, 0.18), vec3(0.18, 0.25, 0.38), sunLit * 0.65);
+
+          vec3 cloudColor = mix(dayBelly, dayTop, clamp(sunLit * 1.15, 0.0, 1.0));
+          cloudColor = mix(cloudColor, nightCloud, clamp(uStarsIntensity, 0.0, 1.0) * 0.88);
+
+          // Mie forward-scattering silver lining around cloud edges
+          float edgeBand = smoothstep(0.02, 0.32, mainDensity) * (1.0 - smoothstep(0.32, 0.88, mainDensity));
+          float miePhase = pow(sunDot, 12.0);
+          vec3 silverLining = (uSunColor * 1.25 + vec3(0.24, 0.20, 0.14))
+            * miePhase * (0.45 + 1.45 * edgeBand) * dayMask * (0.85 + 0.35 * (1.0 - clamp(uSunTransmission, 0.0, 1.0)));
+          cloudColor += silverLining * (1.0 - isStorm * 0.45);
+
+          float cloudAlpha = clamp(mainDensity * (0.92 + 0.08 * isStorm), 0.0, 0.98);
+          sky = mix(sky, cloudColor, cloudAlpha);
         }
 
         gl_FragColor = vec4(sky, 1.0);

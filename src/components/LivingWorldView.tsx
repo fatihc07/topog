@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
 import {
+  Cloud,
   CloudRain,
   Compass,
   Droplets,
@@ -21,6 +22,7 @@ import {
   stepForestWeather,
 } from '../services/forestWeatherPhysics';
 import type {
+  CloudStyle,
   ForestSceneStats,
   LivingWorldControls,
   LivingWorldPreset,
@@ -34,7 +36,19 @@ const FALLBACK_CONTROLS: LivingWorldControls = {
   precipIntensity: 0,
   windStrength: 0.25,
   timeOfDayHours: 14.2,
+  cloudStyle: 'partly',
+  cloudCoverage: 0.42,
 };
+
+const CLOUD_STYLE_OPTIONS: {
+  style: CloudStyle;
+  label: string;
+}[] = [
+  { style: 'cumulus', label: 'Kümülüs' },
+  { style: 'partly', label: 'Parçalı' },
+  { style: 'cirrus', label: 'Sirüs' },
+  { style: 'storm', label: 'Fırtına' },
+];
 
 const PRECIP_OPTIONS: {
   mode: PrecipMode;
@@ -89,6 +103,35 @@ function getRateBadge(
   };
 }
 
+function getSunBadge(
+  sunVisibility: number,
+  timeOfDayHours: number
+): { text: string; toneClass: string } {
+  if (timeOfDayHours < 6 || timeOfDayHours > 20.5) {
+    return {
+      text: '🌙 Gece Gökyüzü',
+      toneClass: '',
+    };
+  }
+  const pct = Math.round(sunVisibility * 100);
+  if (sunVisibility >= 0.72) {
+    return {
+      text: `☀️ Güneş Açık (%${pct})`,
+      toneClass: 'is-clear',
+    };
+  }
+  if (sunVisibility >= 0.35) {
+    return {
+      text: `⛅ Güneş Buluttan Süzülüyor (%${pct})`,
+      toneClass: 'is-partial',
+    };
+  }
+  return {
+    text: `☁️ Güneş Bulut Arkasında (%${pct})`,
+    toneClass: 'is-occluded',
+  };
+}
+
 export function LivingWorldView(): JSX.Element {
   const initialPreset = LIVING_WORLD_PRESETS[0];
 
@@ -102,6 +145,7 @@ export function LivingWorldView(): JSX.Element {
     createInitialForestSimState()
   );
   const [fps, setFps] = useState<number>(60);
+  const [sunVisibility, setSunVisibility] = useState<number>(1);
   const [stats, setStats] = useState<ForestSceneStats>({
     trees: 2200,
     grassBlades: 22000,
@@ -181,6 +225,7 @@ export function LivingWorldView(): JSX.Element {
         );
         setHudSim({ ...nextSim });
         setFps(measuredFps);
+        setSunVisibility(controller.getSunVisibility());
         lastHudSync = now;
         framesSinceHud = 0;
       }
@@ -224,6 +269,18 @@ export function LivingWorldView(): JSX.Element {
     setActivePresetId(null);
   };
 
+  const handleSelectCloudStyle = (cloudStyle: CloudStyle) => {
+    if (cloudStyle === 'storm' && controls.cloudCoverage < 0.65) {
+      updateControls({ cloudStyle, cloudCoverage: 0.85 });
+      return;
+    }
+    if (controls.cloudCoverage < 0.25 && cloudStyle !== 'cirrus') {
+      updateControls({ cloudStyle, cloudCoverage: 0.48 });
+      return;
+    }
+    updateControls({ cloudStyle });
+  };
+
   const handleSelectPreset = (preset: LivingWorldPreset) => {
     const nextControls: LivingWorldControls = { ...preset.controls };
     controlsRef.current = nextControls;
@@ -265,6 +322,7 @@ export function LivingWorldView(): JSX.Element {
   };
 
   const rateBadge = getRateBadge(hudSim, controls.tempC);
+  const sunBadge = getSunBadge(sunVisibility, controls.timeOfDayHours);
   const tempColor = controls.tempC < 0 ? '#7dd3fc' : '#fbbf24';
 
   return (
@@ -336,6 +394,14 @@ export function LivingWorldView(): JSX.Element {
           {rateBadge.text}
         </div>
 
+        <div
+          className={`world-sun-pill${
+            sunBadge.toneClass ? ` ${sunBadge.toneClass}` : ''
+          }`}
+        >
+          {sunBadge.text}
+        </div>
+
         <div className="world-stats-line">
           {stats.trees.toLocaleString('tr-TR')} ağaç ·{' '}
           {stats.grassBlades.toLocaleString('tr-TR')} çimen ·{' '}
@@ -403,6 +469,25 @@ export function LivingWorldView(): JSX.Element {
                 onClick={() => handleSelectPrecipMode(mode)}
               >
                 <Icon size={13} />
+                <span>{label}</span>
+              </button>
+            ))}
+          </div>
+
+          <div
+            className="world-cloud-group"
+            role="group"
+            aria-label="Bulut tipi"
+          >
+            {CLOUD_STYLE_OPTIONS.map(({ style, label }) => (
+              <button
+                key={style}
+                type="button"
+                className={`world-cloud-btn${
+                  controls.cloudStyle === style ? ' is-active' : ''
+                }`}
+                onClick={() => handleSelectCloudStyle(style)}
+              >
                 <span>{label}</span>
               </button>
             ))}
@@ -502,6 +587,30 @@ export function LivingWorldView(): JSX.Element {
                 }
                 className="range-input world-slider-input"
                 aria-label="Günün saati"
+              />
+            </label>
+
+            <label className="world-slider-item">
+              <div className="world-slider-head">
+                <span className="world-slider-label">
+                  <Cloud size={12} />
+                  Bulutluluk
+                </span>
+                <span className="world-slider-val">
+                  %{Math.round(controls.cloudCoverage * 100)}
+                </span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={controls.cloudCoverage}
+                onChange={(e) =>
+                  updateControls({ cloudCoverage: Number(e.target.value) })
+                }
+                className="range-input world-slider-input"
+                aria-label="Bulutluluk"
               />
             </label>
           </div>

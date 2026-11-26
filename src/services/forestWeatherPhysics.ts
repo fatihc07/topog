@@ -1,5 +1,6 @@
 import type {
   ActivePrecipKind,
+  CloudStyle,
   LivingWorldControls,
   LivingWorldPreset,
   LivingWorldSimState,
@@ -268,8 +269,10 @@ export const LIVING_WORLD_PRESETS: LivingWorldPreset[] = [
       tempC: 16,
       precipMode: 'clear',
       precipIntensity: 0,
-      windStrength: 0.25,
-      timeOfDayHours: 14.2,
+      windStrength: 0.35,
+      timeOfDayHours: 14.8,
+      cloudStyle: 'cumulus',
+      cloudCoverage: 0.48,
     },
     resetSnowToCm: 0,
   },
@@ -284,6 +287,8 @@ export const LIVING_WORLD_PRESETS: LivingWorldPreset[] = [
       precipIntensity: 0.78,
       windStrength: 0.55,
       timeOfDayHours: 16.0,
+      cloudStyle: 'storm',
+      cloudCoverage: 0.88,
     },
   },
   {
@@ -297,6 +302,8 @@ export const LIVING_WORLD_PRESETS: LivingWorldPreset[] = [
       precipIntensity: 0.9,
       windStrength: 0.65,
       timeOfDayHours: 15.2,
+      cloudStyle: 'storm',
+      cloudCoverage: 0.92,
     },
   },
   {
@@ -308,9 +315,150 @@ export const LIVING_WORLD_PRESETS: LivingWorldPreset[] = [
       tempC: 9,
       precipMode: 'clear',
       precipIntensity: 0,
-      windStrength: 0.35,
-      timeOfDayHours: 12.5,
+      windStrength: 0.38,
+      timeOfDayHours: 12.8,
+      cloudStyle: 'partly',
+      cloudCoverage: 0.42,
     },
     resetSnowToCm: 28,
   },
 ];
+
+function fract(value: number): number {
+  return value - Math.floor(value);
+}
+
+function hash21Cloud(x: number, z: number): number {
+  let px = fract(x * 123.34);
+  let pz = fract(z * 456.21);
+  const dotVal = px * (px + 45.32) + pz * (pz + 45.32);
+  px += dotVal;
+  pz += dotVal;
+  return fract(px * pz);
+}
+
+function noise2Cloud(x: number, z: number): number {
+  const ix = Math.floor(x);
+  const iz = Math.floor(z);
+  const fx = x - ix;
+  const fz = z - iz;
+  const ux = fx * fx * (3 - 2 * fx);
+  const uz = fz * fz * (3 - 2 * fz);
+
+  const a = hash21Cloud(ix, iz);
+  const b = hash21Cloud(ix + 1, iz);
+  const c = hash21Cloud(ix, iz + 1);
+  const d = hash21Cloud(ix + 1, iz + 1);
+  return lerp(lerp(a, b, ux), lerp(c, d, ux), uz);
+}
+
+/**
+ * 4-octave FBM matching GLSL `fbm4` in `forestShaders.ts` 1:1
+ * (column-major rotation `[0.8, -0.6; 0.6, 0.8]`, frequency `2.03`,
+ * offset `(17.1, 31.7)`, amplitude `0.5` decaying by `0.5`).
+ */
+export function fbmCloud2D(x: number, z: number): number {
+  let v = 0;
+  let a = 0.5;
+  let px = x;
+  let pz = z;
+
+  for (let i = 0; i < 4; i++) {
+    v += a * noise2Cloud(px, pz);
+    const nx = (0.8 * px - 0.6 * pz) * 2.03 + 17.1;
+    const nz = (0.6 * px + 0.8 * pz) * 2.03 + 31.7;
+    px = nx;
+    pz = nz;
+    a *= 0.5;
+  }
+
+  return v;
+}
+
+/**
+ * Evaluates deterministic cloud optical density in [0, 1] at world (X, Z),
+ * synchronized 1:1 with the GLSL skybox and ground cloud-shadow evaluator.
+ */
+export function evaluateCloudDensityAt(
+  worldX: number,
+  worldZ: number,
+  cloudTime: number,
+  coverage: number,
+  cloudStyle: CloudStyle
+): number {
+  const cov = clamp(coverage, 0, 1);
+  if (cov <= 0.005) return 0;
+  const covFade = smoothstep(0, 0.06, cov);
+
+  // Main cumulus/storm cloud layer
+  const mainU = (worldX + cloudTime * 4.5) * 0.0042;
+  const mainV = (worldZ + cloudTime * 2.1) * 0.0042;
+  const baseNoise = fbmCloud2D(mainU, mainV);
+  const detailNoise = fbmCloud2D(mainU * 2.15 + 11.4, mainV * 2.15 - 7.3);
+
+  // High silky cirrus layer (stretched along X)
+  const cirrusU = (worldX + cloudTime * 6.2) * 0.0022 * 0.65;
+  const cirrusV = (worldZ + cloudTime * 1.4) * 0.0022 * 1.8;
+  const cirrusWarp = fbmCloud2D(cirrusU * 0.6 + 3.2, cirrusV * 0.6 - 5.1);
+  const cirrusNoise = fbmCloud2D(cirrusU + cirrusWarp * 0.45, cirrusV - cirrusWarp * 0.25);
+  const cirrusThresh = lerp(0.72, 0.24, cov);
+  const cirrusAlpha = smoothstep(cirrusThresh - 0.08, cirrusThresh + 0.18, cirrusNoise) * covFade;
+
+  if (cloudStyle === 'cirrus') {
+    return clamp(cirrusAlpha * 0.48, 0, 1);
+  }
+
+  if (cloudStyle === 'storm') {
+    const stormShape = baseNoise * 0.65 + detailNoise * 0.35;
+    const thresh = lerp(0.68, 0.14, cov);
+    const mainDensity =
+      smoothstep(thresh - 0.1, thresh + 0.16, stormShape) * (0.86 + 0.14 * cov) * covFade;
+    return clamp(mainDensity, 0, 1);
+  }
+
+  const mainShape = baseNoise * 0.72 + detailNoise * 0.28;
+
+  if (cloudStyle === 'partly') {
+    const thresh = lerp(0.79, 0.3, cov);
+    const mainDensity =
+      smoothstep(thresh - 0.06, thresh + 0.16, mainShape) * 0.88 * covFade;
+    return clamp(mainDensity + cirrusAlpha * 0.24 * (1 - mainDensity), 0, 1);
+  }
+
+  // 'cumulus'
+  const thresh = lerp(0.75, 0.22, cov);
+  const mainDensity = smoothstep(thresh - 0.07, thresh + 0.14, mainShape) * covFade;
+  return clamp(mainDensity + cirrusAlpha * 0.12 * (1 - mainDensity), 0, 1);
+}
+
+/**
+ * Evaluates direct solar transmission [0, 1] through the 180 m cloud plane
+ * along the sun ray from camera position (camX, camZ) using a 5-point kernel.
+ */
+export function evaluateSunCloudTransmission(
+  sunDirX: number,
+  sunDirY: number,
+  sunDirZ: number,
+  camX: number,
+  camZ: number,
+  cloudTime: number,
+  coverage: number,
+  cloudStyle: CloudStyle
+): number {
+  if (sunDirY <= 0.02) return 0;
+
+  const safeSunY = Math.max(sunDirY, 0.14);
+  const hitX = camX + (sunDirX / safeSunY) * 180;
+  const hitZ = camZ + (sunDirZ / safeSunY) * 180;
+
+  const offset = 8;
+  const d =
+    (evaluateCloudDensityAt(hitX, hitZ, cloudTime, coverage, cloudStyle) +
+      evaluateCloudDensityAt(hitX + offset, hitZ, cloudTime, coverage, cloudStyle) +
+      evaluateCloudDensityAt(hitX - offset, hitZ, cloudTime, coverage, cloudStyle) +
+      evaluateCloudDensityAt(hitX, hitZ + offset, cloudTime, coverage, cloudStyle) +
+      evaluateCloudDensityAt(hitX, hitZ - offset, cloudTime, coverage, cloudStyle)) /
+    5;
+
+  return clamp(1.0 - d * 0.92, 0.08, 1.0);
+}
