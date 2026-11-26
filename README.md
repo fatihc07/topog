@@ -1,6 +1,6 @@
 # Topog — Dünya Fiziksel Haritası & Canlı Atmosfer Atlası
 
-**Aktif Sürüm:** `T 5.1` · **Sürüm Geçmişi:** [CHANGELOG.md](./CHANGELOG.md)
+**Aktif Sürüm:** `T 6.0` · **Sürüm Geçmişi:** [CHANGELOG.md](./CHANGELOG.md)
 
 Topog; tamamen ücretsiz, API anahtarı gerektirmeyen açık coğrafi ve meteorolojik veri kaynaklarıyla çalışan etkileşimli 2B/3B dünya fiziksel harita, canlı hava durumu, yağmur radarı ve uydu bulut örtüsü uygulamasıdır.
 
@@ -40,8 +40,13 @@ Topog; tamamen ücretsiz, API anahtarı gerektirmeyen açık coğrafi ve meteoro
 - **Yağmur Radarı (RainViewer):** Canlı yağış radarı, `%20 – %100` şeffaflık ayarı ve son 2 saat için **Oynat / Duraklat** animasyon çubuğu.
 - **Canlı Bulut Örtüsü (Uydu IR):** SSEC RealEarth küresel jeostasyoner uydu IR bulut katmanı (`z8`'e kadar yüksek çözünürlük, özel `cloud-ir://` şeffaf bulut protokolü) ve `%20 – %100` şeffaflık ayarı.
 
+### Canlı Dünya Modu (Three.js 3B Orman & Atmosfer Fiziği)
+- **Üst Mod Sekmesi (`Canlı Atlas` | `Canlı Dünya`):** Harita görünümü ile etkileşimli 3B orman dünyası arasında tek tıkla geçiş (Three.js yalnızca `Canlı Dünya` seçildiğinde tembel yüklenir).
+- **Yoğun Prosedürel Orman & Özel GLSL Shaderlar:** `260×260 m` engebeli orman arazisinde `2.200` instanced ağaç (`1.650` çam/ibreli, `550` geniş yapraklı), `22.000` çimen demeti, `3.200` eğrelti otu, `220` yosunlu kaya; rüzgar dalgası, ıslanma parlaklığı, kar beyazlaşması, gece/gündüz gökyüzü, GPU hacimsel yağmur/kar parçacıkları ve akşam ateş böcekleri (`OrbitControls` + `WASD`/Yön tuşları).
+- **Termodinamik Kar Birikme, Erime & Yağmur Fiziği:** Sıcaklık (`-20°C..+25°C`), yağış modu (`Açık`, `Yağmur`, `Kar`, `Otomatik`), şiddet, rüzgar, saat kontrolleri ve 4 hazır senaryo (*Güneşli Orman, Orman Yağmuru, Kar Fırtınası, Bahar Erimesi*) ile soğukta `0..80 cm` kar birikimi, `0°C` üstünde güneş ve yağmurla erime.
+
 ### Sürüm Takibi
-- Uygulama içi sol üstteki **`T 5.1`** rozetine tıklayarak tüm sürüm notlarını (*Eklenenler / Yapılanlar / Çıkarılanlar*) görüntüleyebilirsiniz.
+- Uygulama içi sol üstteki **`T 6.0`** rozetine tıklayarak tüm sürüm notlarını (*Eklenenler / Yapılanlar / Çıkarılanlar*) görüntüleyebilirsiniz.
 - Proje kuralları ve uzman alt ajan rehberi [`AGENTS.md`](./AGENTS.md) ve [`.agents/agents/`](./.agents/agents/) içinde tutulur.
 
 ---
@@ -66,7 +71,7 @@ npm run build
 
 ## Teknoloji Yığını
 - **Arayüz:** React 19, TypeScript, Vite, Lucide React
-- **Harita Motoru:** MapLibre GL JS
+- **Harita & 3B Motor:** MapLibre GL JS, Three.js (WebGL + Özel GLSL Shader)
 - **Açık Veri Kaynakları:** OpenStreetMap, OpenTopoMap, Esri ArcGIS Online, AWS Terrain Tiles (Terrarium), Nominatim, Open-Meteo, REST Countries, RainViewer, SSEC RealEarth, Natural Earth
 
 ---

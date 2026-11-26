@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AppModeTabs } from './components/AppModeTabs';
 import { CompareCard } from './components/CompareCard';
 import { CountryDetailCard } from './components/CountryDetailCard';
 import { InspectCard } from './components/InspectCard';
@@ -54,7 +55,10 @@ import type {
   WeatherData,
 } from './types/weather';
 
+const LivingWorldView = lazy(() => import('./components/LivingWorldView'));
+
 export default function App() {
+  const [appMode, setAppMode] = useState<'atlas' | 'world'>('atlas');
   const mapHandleRef = useRef<MapCanvasHandle | null>(null);
   const inspectAbortRef = useRef<AbortController | null>(null);
 
@@ -614,7 +618,11 @@ export default function App() {
 
   return (
     <main className="app-shell">
-      <MapCanvas
+      <AppModeTabs mode={appMode} onChangeMode={setAppMode} />
+
+      {appMode === 'atlas' ? (
+        <>
+          <MapCanvas
         ref={mapHandleRef}
         activeLayer={activeLayer}
         terrain3D={terrain3D}
@@ -904,6 +912,20 @@ export default function App() {
 
       {releaseNotesOpen && (
         <ReleaseNotesModal onClose={() => setReleaseNotesOpen(false)} />
+      )}
+        </>
+      ) : (
+        <Suspense
+          fallback={
+            <div className="world-loading-screen">
+              <div className="glass-panel world-loading-card">
+                Canlı Dünya 3B orman yükleniyor...
+              </div>
+            </div>
+          }
+        >
+          <LivingWorldView />
+        </Suspense>
       )}
     </main>
   );

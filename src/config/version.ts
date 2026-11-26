@@ -7,9 +7,25 @@ export interface ReleaseEntry {
   removed: string[];
 }
 
-export const APP_VERSION = 'T 5.1';
+export const APP_VERSION = 'T 6.0';
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
+  {
+    version: 'T 6.0',
+    date: '2026-11-26',
+    title: 'Canlı Dünya Modu — Three.js Yoğun Prosedürel Orman, Özel GLSL Shaderlar ve Kar/Yağmur Fiziği',
+    added: [
+      'Üst Mod Sekmesi (Canlı Atlas | Canlı Dünya) eklendi (src/components/AppModeTabs.tsx, src/App.tsx): Canlı harita ile 3B orman ortamı arasında tek tıkla geçiş; LivingWorldView ve Three.js (vendor-three) yalnızca Canlı Dünya seçildiğinde tembel yüklenir ve WebGL bağlamları çakışmadan ayrılır.',
+      'Yoğun Three.js Prosedürel Orman & Özel GLSL Shaderlar eklendi (src/services/forestShaders.ts, src/services/forestSceneBuilder.ts): 1.650 katmanlı çam/ibreli ve 550 geniş yapraklı instanced ağaç (toplam 2.200 ağaç), GPU LODlu 22.000 çimen demeti, 3.200 eğrelti otu, 220 yosunlu kaya ve merkezi açıklık içeren 260×260 m engebeli orman arazisi.',
+      'Özel GLSL shader efektleri: rüzgar dalgası animasyonu, zemin yosun/iğne yaprak/kaya dokusu, yağmurda ıslanma parlaklığı, kar örtüsüyle beyazlaşan ağaç/eğrelti/çimen/zemin, gece/gündüz dinamik gökyüzü, GPU hacimsel kar/yağmur parçacıkları ve akşam ateş böcekleri; OrbitControls + WASD/Yön tuşları ile gezinti ve tam WebGL kaynak temizliği.',
+      'Sıcaklığa Duyarlı Kar Birikme, Erime & Yağmur Fiziği eklendi (src/types/livingWorld.ts, src/services/forestWeatherPhysics.ts, src/components/LivingWorldView.tsx): Sıcaklık (-20°C..+25°C), yağış modu (Açık, Yağmur, Kar, Otomatik), şiddet, rüzgar ve saat kontrolleri + 4 hazır atmosfer senaryosu (Güneşli Orman, Orman Yağmuru, Kar Fırtınası, Bahar Erimesi). Soğukta birikip yükselen (0..80 cm), 0°C üstünde güneş ve yağmurla eriyen canlı termodinamik simülasyon ve üst-sol ortam HUDı.',
+    ],
+    changed: [
+      'qa-verifier denetimi sonrası forestShaders.ts içindeki GLSL half-vector ve rim pow NaN korumaları eklendi.',
+      'vite.config.ts içine Three.js için ayrı tembel vendor-three chunk kuralı eklendi.',
+    ],
+    removed: [],
+  },
   {
     version: 'T 5.1',
     date: '2026-11-26',

@@ -12,6 +12,9 @@ export default defineConfig({
           if (normalizedId.includes('/node_modules/maplibre-gl/')) {
             return 'vendor-maplibre';
           }
+          if (normalizedId.includes('/node_modules/three/')) {
+            return 'vendor-three';
+          }
           if (normalizedId.includes('/node_modules/lucide-react/')) {
             return 'vendor-icons';
           }

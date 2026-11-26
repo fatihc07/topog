@@ -7,6 +7,28 @@ Sürüm numaralandırma kuralı: **`T <Büyük>.<Küçük>`**
 
 ---
 
+## [T 6.0] — 2026-11-26
+**Büyük Sürüm — Canlı Dünya Modu (Three.js Prosedürel Orman, Özel GLSL Shaderlar ve Termodinamik Kar/Yağmur Fiziği)**
+
+### Eklenenler
+- **Üst Mod Sekmesi (`Canlı Atlas` | `Canlı Dünya`)** (`src/components/AppModeTabs.tsx`, `src/App.tsx`): Canlı harita ile 3B orman ortamı arasında tek tıkla geçiş; `LivingWorldView` ve Three.js (`vendor-three`) yalnızca `Canlı Dünya` seçildiğinde tembel yüklenir ve WebGL bağlamları çakışmadan ayrılır.
+- **Yoğun Three.js Prosedürel Orman & Özel GLSL Shaderlar** (`src/services/forestShaders.ts`, `src/services/forestSceneBuilder.ts`):
+  - `1.650` katmanlı çam/ibreli ve `550` geniş yapraklı instanced ağaç (toplam `2.200` ağaç), GPU LOD'lu `22.000` çimen demeti, `3.200` eğrelti otu, `220` yosunlu kaya ve merkezi açıklık içeren `260×260 m` engebeli orman arazisi.
+  - Özel GLSL shader'lar: rüzgar dalgası animasyonu, zemin yosun/iğne yaprak/kaya dokusu, yağmurda ıslanma parlaklığı, kar örtüsüyle beyazlaşan ağaç/eğrelti/çimen/zemin, gece/gündüz dinamik gökyüzü, GPU hacimsel kar/yağmur parçacıkları ve akşam ateş böcekleri.
+  - `OrbitControls` + `WASD`/Yön tuşları ile orman içinde gezinti ve tam WebGL kaynak temizliği (`dispose`).
+- **Sıcaklığa Duyarlı Kar Birikme, Erime & Yağmur Fiziği** (`src/types/livingWorld.ts`, `src/services/forestWeatherPhysics.ts`, `src/components/LivingWorldView.tsx`):
+  - Sıcaklık (`-20°C..+25°C`), yağış modu (`Açık`, `Yağmur`, `Kar`, `Otomatik`), şiddet, rüzgar ve saat kontrolleri + 4 hazır atmosfer senaryosu (`Güneşli Orman`, `Orman Yağmuru`, `Kar Fırtınası`, `Bahar Erimesi`).
+  - Soğukta birikip yükselen (`0..80 cm`), `0°C` üstünde güneş ve yağmurla eriyip zemini ıslatan canlı termodinamik simülasyon ve üst-sol ortam HUD'ı.
+
+### Yapılanlar / İyileştirmeler
+- `qa-verifier` bulguları sonrası `src/services/forestShaders.ts` içinde GLSL half-vector (`dot(hv, hv) > 1e-6`) ve rim `pow(1.0 - clamp(...))` `NaN` korumaları eklendi.
+- `vite.config.ts` üzerinde Three.js bağımlılıkları için ayrı tembel `vendor-three` chunk yapılandırması eklendi.
+
+### Çıkarılanlar
+- Bu sürümde kaldırılan bir özellik yoktur.
+
+---
+
 ## [T 5.1] — 2026-11-26
 **Favori Yerler, Arama Geçmişi, Mini Konum Haritası, Birleşik Önbellek & Bundle/Hook Mimarisi**
 
