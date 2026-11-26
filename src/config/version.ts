@@ -7,9 +7,25 @@ export interface ReleaseEntry {
   removed: string[];
 }
 
-export const APP_VERSION = 'T 6.0';
+export const APP_VERSION = 'T 6.1';
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
+  {
+    version: 'T 6.1',
+    date: '2026-11-26',
+    title: 'Canlı Dünya — Gerçekçi Dallanan Yapraklı Orman, Kıvrımlı Patika, Sis & Işık Hüzmeleri',
+    added: [
+      'Prosedürel CanvasTexture Doku Seti (src/services/forestTextures.ts): Gövde kabuğu (barkMap), alpha-cutout yaprak kümesi kartları (leafClusterMap 512×512), tüysü eğrelti yaprakları (fernFrondMap), ince çimen demetleri (grassTuftMap) ve humuslu orman zemini (groundDetailMap) eklendi.',
+      'Kıvrımlı Orman Patikası, Işık Benekleri, Hacimsel Sis & Yosunlu Kayalar (src/services/forestWeatherPhysics.ts, forestShaders.ts, forestSceneBuilder.ts): getTrailCenterX / getTrailFactor ile güneş benekli sıcak toprak patika, IcosahedronGeometry(1, 3) yüksek segmentli yosunlu kayalar, 32 hacimsel sis düzlemi, 18 güneş hüzmesi ve yağmurda ıslanma yansımaları eklendi.',
+    ],
+    changed: [
+      'Düşük poligon koni/küre ağaçlar yerine CatmullRomCurve3 eğimli ve çatallı dallara sahip 3 gerçekçi ağaç arketipi (800 meşe/kayın, 650 akçaağaç/huş, 450 yaşlı gövde), 4.200 adet 7 yapraklı eğrelti rozeti ve 26.000 çimen demeti getirildi.',
+      'qa-verifier denetimi sonrası forestShaders.ts ateş böceği pow tabanı clamp NaN koruması, trunkCurve.getPointAt gövde-dal bağlantısı, geniş patika kadrajı ve src/index.css (.world-sliders-grid 721–960px 2×2 sarma) düzeltildi.',
+    ],
+    removed: [
+      'Düşük poligonlu koni ve blok küre ağaç geometrileri kaldırıldı.',
+    ],
+  },
   {
     version: 'T 6.0',
     date: '2026-11-26',

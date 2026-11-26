@@ -3008,7 +3008,7 @@ body,
 }
 
 .world-sliders-grid {
-  flex: 1;
+  flex: 1 1 480px;
   min-width: 0;
   display: grid;
   grid-template-columns: repeat(4, minmax(110px, 1fr));
@@ -3079,6 +3079,10 @@ body,
 @media (min-width: 721px) and (max-width: 960px) {
   .layer-panel-dock {
     top: 68px;
+  }
+
+  .world-sliders-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

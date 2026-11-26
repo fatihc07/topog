@@ -80,8 +80,31 @@ export function fbm2D(x: number, z: number, octaves = 4): number {
 }
 
 /**
+ * Winding forest footpath X center coordinate for a given Z coordinate.
+ */
+export function getTrailCenterX(z: number): number {
+  return Math.sin(z * 0.075) * 3.6 + Math.sin(z * 0.028 + 0.8) * 2.1;
+}
+
+/**
+ * Smooth 0..1 mask for the winding dirt trail: 1.0 inside ~1.1 m core,
+ * tapering smoothly to 0.0 by ~2.5 m edge with natural FBM bank irregularity.
+ */
+export function getTrailFactor(x: number, z: number): number {
+  const centerX = getTrailCenterX(z);
+  // Perpendicular scale from the trail curve's local slope dx/dz.
+  const dxdz =
+    3.6 * 0.075 * Math.cos(z * 0.075) + 2.1 * 0.028 * Math.cos(z * 0.028 + 0.8);
+  const perpScale = 1 / Math.sqrt(1 + dxdz * dxdz);
+  const edgeMod = (fbm2D(x * 0.35 + 7.1, z * 0.35 - 3.4, 2) - 0.5) * 0.55;
+  const dist = Math.abs(x - centerX) * perpScale + edgeMod;
+  return 1 - smoothstep(1.1, 2.5, dist);
+}
+
+/**
  * Rolling woodland terrain height (m) across the 260x260 m scene,
- * with a gently flattened central mossy glade near (0, 0) within ~18 m radius.
+ * with a gently flattened central mossy glade near (0, 0) within ~18 m radius
+ * and a slightly recessed winding dirt footpath between mossy banks.
  */
 export function getTerrainHeight(x: number, z: number): number {
   const broad = fbm2D(x * 0.014 + 3.7, z * 0.014 - 2.1, 4);
@@ -101,7 +124,7 @@ export function getTerrainHeight(x: number, z: number): number {
   const gladeBase = 0.35 + (detail - 0.5) * 0.3;
   const gladeBlend = smoothstep(6, 22, distFromOrigin);
 
-  return lerp(gladeBase, hillHeight, gladeBlend);
+  return lerp(gladeBase, hillHeight, gladeBlend) - 0.22 * getTrailFactor(x, z);
 }
 
 export function createInitialForestSimState(): LivingWorldSimState {
