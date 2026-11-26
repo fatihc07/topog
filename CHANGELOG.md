@@ -7,6 +7,23 @@ Sürüm numaralandırma kuralı: **`T <Büyük>.<Küçük>`**
 
 ---
 
+## [T 5.0] — 2026-11-26
+**Büyük Sürüm — Ülke Bilgi Kartı, 24 Saat / 7 Gün Hava Tahmini, Deniz Suyu Rozetleri & Karşılaştırma Modu**
+
+### Eklenenler
+- **Ülke Bilgi Kartı & Odaklanma** (`src/services/countryDetailService.ts`, `src/components/CountryDetailCard.tsx`, `src/config/layers.ts`, `src/components/MapCanvas.tsx`): Ülke Modu açıkken tıklanan ülkenin seçili sınır vurgusu (`selected` feature-state), antimeridyen güvenli tam sınır odaklanması (`fitCountryBounds`), başkent, nüfus, yüzölçümü, yerel saat, para birimi ve başkentin gerçek anlık hava durumu (REST Countries + Open-Meteo, 15 dk TTL önbellek).
+- **24 Saatlik & 7 Günlük Hava Tahmini** (`src/services/forecastService.ts`, `src/components/ForecastSection.tsx`, `src/components/WeatherDetailCard.tsx`): Şehir ve dağ detay kartı içinde `24 Saat` sıcaklık/yağış olasılığı SVG grafiği ve `7 Gün` termal aralık çubuklu tahmin şeridi (Open-Meteo, 15 dk TTL önbellek).
+- **Haritada Deniz Suyu & Dalga Rozetleri** (`src/data/worldSeas.json`, `src/services/seaIndex.ts`, `src/services/marineService.ts` `fetchMarineBatch`, `src/components/LayerPanel.tsx`): Katman panelindeki `Deniz Suyu & Dalgalar` anahtarıyla Türkiye ve dünya denizlerinde gerçek deniz suyu sıcaklığı ve dalga yüksekliği rozetleri (`🌊`, 15 dk TTL önbellek).
+- **İki Şehir / İki Dağ Yan Yana Karşılaştırma** (`src/types/compare.ts`, `src/components/CompareCard.tsx`, `src/App.tsx`): Herhangi bir şehir veya dağ kartından `Karşılaştır` ile haritadan ikinci noktayı seçip sıcaklık, hissedilen sıcaklık, nem, rüzgar, basınç, rakım ve kar kalınlığını fark rozetleriyle yan yana kıyaslama.
+
+### Yapılanlar / İyileştirmeler
+- Detay ve karşılaştırma kartları için duyarlı masaüstü (`max-height: calc(100vh - 175px)`) ve mobil (`55vh`) kaydırılabilir kart düzeni eklendi (`src/index.css`).
+
+### Çıkarılanlar
+- Bu sürümde kaldırılan bir özellik yoktur.
+
+---
+
 ## [T 4.3] — 2026-11-25
 **Arayüz Sadeleştirmesi — Hava Simülatörü Modu Kaldırıldı**
 

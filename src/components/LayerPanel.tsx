@@ -13,6 +13,7 @@ import {
   Sun,
   Sunset,
   Trash2,
+  Waves,
 } from 'lucide-react';
 import { BASE_LAYERS } from '../config/layers';
 import type { BaseLayerId } from '../types/map';
@@ -28,6 +29,7 @@ interface LayerPanelProps {
   weatherBadgeOpacity: number;
   weatherCacheCount: number;
   peaksEnabled: boolean;
+  seasEnabled: boolean;
   rainEnabled: boolean;
   rainOpacity: number;
   rainLoading: boolean;
@@ -45,6 +47,7 @@ interface LayerPanelProps {
   onChangeWeatherBadgeOpacity: (value: number) => void;
   onClearWeatherCache: () => void;
   onTogglePeaks: () => void;
+  onToggleSeas: () => void;
   onToggleRain: () => void;
   onChangeRainOpacity: (value: number) => void;
   onToggleClouds: () => void;
@@ -63,6 +66,7 @@ export function LayerPanel({
   weatherBadgeOpacity,
   weatherCacheCount,
   peaksEnabled,
+  seasEnabled,
   rainEnabled,
   rainOpacity,
   rainLoading,
@@ -80,6 +84,7 @@ export function LayerPanel({
   onChangeWeatherBadgeOpacity,
   onClearWeatherCache,
   onTogglePeaks,
+  onToggleSeas,
   onToggleRain,
   onChangeRainOpacity,
   onToggleClouds,
@@ -387,6 +392,27 @@ export function LayerPanel({
                 aria-checked={peaksEnabled}
                 className={`switch-btn ${peaksEnabled ? 'on' : ''}`}
                 onClick={onTogglePeaks}
+              >
+                <span className="switch-thumb" />
+              </button>
+            </div>
+
+            <div className="toggle-row" style={{ marginTop: 4 }}>
+              <div className="toggle-label-group">
+                <Waves size={16} color="#06b6d4" />
+                <div>
+                  <div className="toggle-label-title">Deniz Suyu &amp; Dalgalar</div>
+                  <div className="toggle-label-sub">
+                    Haritada deniz sıcaklığı ve dalga yüksekliği · 15 dk TTL
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={seasEnabled}
+                className={`switch-btn ${seasEnabled ? 'on' : ''}`}
+                onClick={onToggleSeas}
               >
                 <span className="switch-thumb" />
               </button>

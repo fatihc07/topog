@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { CompareCard } from './components/CompareCard';
+import { CountryDetailCard } from './components/CountryDetailCard';
 import { InspectCard } from './components/InspectCard';
 import { LayerPanel } from './components/LayerPanel';
 import { MapCanvas, type MapCanvasHandle } from './components/MapCanvas';
@@ -14,8 +16,19 @@ import {
   getVisibleCities,
   hasCityNearPoint,
 } from './services/cityIndex';
+import {
+  clearCountryDetailCache,
+  fetchCountryDetail,
+  type CountryDetailData,
+} from './services/countryDetailService';
+import type { CountryHoverInfo } from './services/countryService';
+import { clearForecastCache } from './services/forecastService';
 import { fetchElevation, reverseGeocode } from './services/geocoding';
-import { clearMarineCache, fetchMarineData } from './services/marineService';
+import {
+  clearMarineCache,
+  fetchMarineBatch,
+  fetchMarineData,
+} from './services/marineService';
 import {
   PEAKS_MIN_ZOOM,
   fetchOverpassPeaks,
@@ -25,6 +38,11 @@ import {
   selectNonOverlappingPeaks,
 } from './services/peakService';
 import { fetchRainViewerFrames } from './services/radarService';
+import {
+  SEAS_MIN_ZOOM,
+  getVisibleSeaPoints,
+  type SeaDisplayItem,
+} from './services/seaIndex';
 import { getSunPositionForPoint } from './services/solarService';
 import {
   clearWeatherCache,
@@ -35,6 +53,7 @@ import {
   fetchWeatherForCities,
   resolveLocalCityAtCenter,
 } from './services/weatherService';
+import type { CompareTarget } from './types/compare';
 import type {
   BaseLayerId,
   FlyTarget,
@@ -57,6 +76,8 @@ export default function App() {
   const inspectAbortRef = useRef<AbortController | null>(null);
   const weatherAbortRef = useRef<AbortController | null>(null);
   const peaksAbortRef = useRef<AbortController | null>(null);
+  const countryAbortRef = useRef<AbortController | null>(null);
+  const seasAbortRef = useRef<AbortController | null>(null);
   const weatherTimerRef = useRef<number | null>(null);
   const lastBoundsRef = useRef<ViewportBounds | null>(null);
 
@@ -67,6 +88,14 @@ export default function App() {
   const [globeMode, setGlobeMode] = useState(false);
   const [countryMode, setCountryMode] = useState(false);
   const [countryLoading, setCountryLoading] = useState(false);
+  const [selectedCountry, setSelectedCountry] =
+    useState<CountryHoverInfo | null>(null);
+  const [selectedCountryBbox, setSelectedCountryBbox] = useState<
+    [number, number, number, number] | null
+  >(null);
+  const [countryDetail, setCountryDetail] =
+    useState<CountryDetailData | null>(null);
+  const [countryDetailLoading, setCountryDetailLoading] = useState(false);
 
   const [rainEnabled, setRainEnabled] = useState(false);
   const [rainOpacity, setRainOpacity] = useState(0.75);
@@ -94,6 +123,13 @@ export default function App() {
   const [peaksEnabled, setPeaksEnabled] = useState(true);
   const [peakItems, setPeakItems] = useState<PeakDisplayItem[]>([]);
   const [selectedPeak, setSelectedPeak] = useState<PeakDisplayItem | null>(
+    null
+  );
+  const [seasEnabled, setSeasEnabled] = useState(false);
+  const [seaItems, setSeaItems] = useState<SeaDisplayItem[]>([]);
+  const [selectedSeaId, setSelectedSeaId] = useState<string | null>(null);
+  const [compareFirst, setCompareFirst] = useState<CompareTarget | null>(null);
+  const [compareSecond, setCompareSecond] = useState<CompareTarget | null>(
     null
   );
   const [refreshingCity, setRefreshingCity] = useState(false);
@@ -327,6 +363,45 @@ export default function App() {
     []
   );
 
+  const syncSeasForBounds = useCallback(
+    async (bounds: ViewportBounds, enabled: boolean) => {
+      seasAbortRef.current?.abort();
+
+      if (!enabled || bounds.zoom < SEAS_MIN_ZOOM) {
+        setSeaItems([]);
+        return;
+      }
+
+      const controller = new AbortController();
+      seasAbortRef.current = controller;
+
+      try {
+        const visibleSeas = getVisibleSeaPoints(bounds, 8);
+        if (visibleSeas.length === 0) {
+          setSeaItems([]);
+          return;
+        }
+
+        const batch = await fetchMarineBatch(visibleSeas, {
+          signal: controller.signal,
+        });
+        if (controller.signal.aborted) return;
+
+        const items: SeaDisplayItem[] = [];
+        for (const sea of visibleSeas) {
+          const marine = batch.results.get(sea.id);
+          if (marine) {
+            items.push({ sea, marine });
+          }
+        }
+        setSeaItems(items);
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') return;
+      }
+    },
+    []
+  );
+
   const handleViewportChange = useCallback(
     (bounds: ViewportBounds) => {
       lastBoundsRef.current = bounds;
@@ -337,9 +412,17 @@ export default function App() {
       weatherTimerRef.current = window.setTimeout(() => {
         void syncWeatherForBounds(bounds, weatherEnabled);
         void syncPeaksForBounds(bounds, peaksEnabled);
+        void syncSeasForBounds(bounds, seasEnabled);
       }, 250);
     },
-    [syncWeatherForBounds, syncPeaksForBounds, weatherEnabled, peaksEnabled]
+    [
+      syncWeatherForBounds,
+      syncPeaksForBounds,
+      syncSeasForBounds,
+      weatherEnabled,
+      peaksEnabled,
+      seasEnabled,
+    ]
   );
 
   useEffect(() => {
@@ -361,6 +444,26 @@ export default function App() {
   }, [peaksEnabled, syncPeaksForBounds]);
 
   useEffect(() => {
+    if (lastBoundsRef.current) {
+      void syncSeasForBounds(lastBoundsRef.current, seasEnabled);
+    }
+    if (!seasEnabled) {
+      setSeaItems([]);
+      setSelectedSeaId(null);
+    }
+  }, [seasEnabled, syncSeasForBounds]);
+
+  useEffect(() => {
+    if (!countryMode) {
+      countryAbortRef.current?.abort();
+      setSelectedCountry(null);
+      setSelectedCountryBbox(null);
+      setCountryDetail(null);
+      setCountryDetailLoading(false);
+    }
+  }, [countryMode]);
+
+  useEffect(() => {
     return () => {
       if (weatherTimerRef.current !== null) {
         window.clearTimeout(weatherTimerRef.current);
@@ -368,13 +471,21 @@ export default function App() {
       weatherAbortRef.current?.abort();
       peaksAbortRef.current?.abort();
       inspectAbortRef.current?.abort();
+      countryAbortRef.current?.abort();
+      seasAbortRef.current?.abort();
     };
   }, []);
 
   const handleInspectPoint = useCallback(
     async (lng: number, lat: number, presetPlaceName?: string) => {
+      countryAbortRef.current?.abort();
+      setSelectedCountry(null);
+      setSelectedCountryBbox(null);
+      setCountryDetail(null);
+      setCountryDetailLoading(false);
       setSelectedWeather(null);
       setSelectedPeak(null);
+      setSelectedSeaId(null);
       inspectAbortRef.current?.abort();
       const controller = new AbortController();
       inspectAbortRef.current = controller;
@@ -421,29 +532,155 @@ export default function App() {
     []
   );
 
-  const handleSelectWeather = useCallback((item: WeatherData) => {
+  const handleSelectWeather = useCallback(
+    (item: WeatherData) => {
+      if (compareFirst && !compareSecond) {
+        if (item.cityId !== compareFirst.id) {
+          setCompareSecond({
+            id: item.cityId,
+            kind: 'city',
+            weather: item,
+          });
+        }
+        return;
+      }
+
+      inspectAbortRef.current?.abort();
+      countryAbortRef.current?.abort();
+      setInspectedPoint(null);
+      setSelectedSeaId(null);
+      setSelectedPeak(null);
+      setSelectedCountry(null);
+      setSelectedCountryBbox(null);
+      setCountryDetail(null);
+      setCountryDetailLoading(false);
+      setCompareFirst(null);
+      setCompareSecond(null);
+      setSelectedWeather(item);
+    },
+    [compareFirst, compareSecond]
+  );
+
+  const handleSelectPeak = useCallback(
+    (item: PeakDisplayItem) => {
+      if (compareFirst && !compareSecond) {
+        if (item.weather) {
+          const peakTargetId = getPeakCacheId(item.peak.id);
+          if (peakTargetId !== compareFirst.id) {
+            setCompareSecond({
+              id: peakTargetId,
+              kind: 'peak',
+              weather: item.weather,
+              elevationMeters: item.peak.elevation,
+            });
+          }
+        }
+        return;
+      }
+
+      inspectAbortRef.current?.abort();
+      countryAbortRef.current?.abort();
+      setSelectedWeather(null);
+      setSelectedSeaId(null);
+      setSelectedCountry(null);
+      setSelectedCountryBbox(null);
+      setCountryDetail(null);
+      setCountryDetailLoading(false);
+      setCompareFirst(null);
+      setCompareSecond(null);
+      if (item.weather) {
+        setInspectedPoint(null);
+        setSelectedPeak(item);
+      } else {
+        setSelectedPeak(null);
+        setInspectedPoint({
+          lng: item.peak.lng,
+          lat: item.peak.lat,
+          elevation: item.peak.elevation,
+          placeName: `${item.peak.name} (Zirve)`,
+          loading: false,
+        });
+      }
+    },
+    [compareFirst, compareSecond]
+  );
+
+  const handleSelectCountry = useCallback(
+    async (
+      info: CountryHoverInfo,
+      bbox: [number, number, number, number] | null
+    ) => {
+      countryAbortRef.current?.abort();
+      inspectAbortRef.current?.abort();
+      const controller = new AbortController();
+      countryAbortRef.current = controller;
+
+      setSelectedWeather(null);
+      setSelectedPeak(null);
+      setInspectedPoint(null);
+      setSelectedSeaId(null);
+      setCompareFirst(null);
+      setCompareSecond(null);
+      setSelectedCountry(info);
+      setSelectedCountryBbox(bbox);
+      setCountryDetail(null);
+      setCountryDetailLoading(true);
+
+      if (bbox) {
+        mapHandleRef.current?.fitCountryBounds(bbox);
+      }
+
+      try {
+        const detail = await fetchCountryDetail(info, controller.signal);
+        if (controller.signal.aborted) return;
+        setCountryDetail(detail);
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') return;
+        setCountryDetail(null);
+      } finally {
+        if (!controller.signal.aborted) {
+          setCountryDetailLoading(false);
+        }
+      }
+    },
+    []
+  );
+
+  const handleSelectSea = useCallback((item: SeaDisplayItem) => {
     inspectAbortRef.current?.abort();
-    setInspectedPoint(null);
+    countryAbortRef.current?.abort();
+    setSelectedWeather(null);
     setSelectedPeak(null);
-    setSelectedWeather(item);
+    setSelectedCountry(null);
+    setSelectedCountryBbox(null);
+    setCountryDetail(null);
+    setCountryDetailLoading(false);
+    setCompareFirst(null);
+    setCompareSecond(null);
+    setSelectedSeaId(item.sea.id);
+    setInspectedPoint({
+      lng: item.sea.lng,
+      lat: item.sea.lat,
+      elevation: 0,
+      placeName: `${item.sea.name} (${item.sea.region})`,
+      marine: item.marine,
+      loading: false,
+    });
   }, []);
 
-  const handleSelectPeak = useCallback((item: PeakDisplayItem) => {
+  const handleStartCompare = useCallback((target: CompareTarget) => {
     inspectAbortRef.current?.abort();
+    countryAbortRef.current?.abort();
     setSelectedWeather(null);
-    if (item.weather) {
-      setInspectedPoint(null);
-      setSelectedPeak(item);
-    } else {
-      setSelectedPeak(null);
-      setInspectedPoint({
-        lng: item.peak.lng,
-        lat: item.peak.lat,
-        elevation: item.peak.elevation,
-        placeName: `${item.peak.name} (Zirve)`,
-        loading: false,
-      });
-    }
+    setSelectedPeak(null);
+    setSelectedCountry(null);
+    setSelectedCountryBbox(null);
+    setCountryDetail(null);
+    setCountryDetailLoading(false);
+    setInspectedPoint(null);
+    setSelectedSeaId(null);
+    setCompareFirst(target);
+    setCompareSecond(null);
   }, []);
 
   const handleRefreshCityWeather = useCallback(
@@ -500,6 +737,8 @@ export default function App() {
   const handleClearWeatherCache = useCallback(() => {
     clearWeatherCache();
     clearMarineCache();
+    clearCountryDetailCache();
+    clearForecastCache();
     setWeatherCacheCount(0);
     if (lastBoundsRef.current) {
       if (weatherEnabled) {
@@ -508,8 +747,18 @@ export default function App() {
       if (peaksEnabled) {
         void syncPeaksForBounds(lastBoundsRef.current, true);
       }
+      if (seasEnabled) {
+        void syncSeasForBounds(lastBoundsRef.current, true);
+      }
     }
-  }, [syncWeatherForBounds, syncPeaksForBounds, weatherEnabled, peaksEnabled]);
+  }, [
+    syncWeatherForBounds,
+    syncPeaksForBounds,
+    syncSeasForBounds,
+    weatherEnabled,
+    peaksEnabled,
+    seasEnabled,
+  ]);
 
   const handleToggleSolar = useCallback(() => {
     setSolarEnabled((prev) => {
@@ -611,12 +860,17 @@ export default function App() {
         selectedWeatherCityId={selectedWeather?.cityId ?? null}
         peakItems={peakItems}
         selectedPeakId={selectedPeak?.peak.id ?? null}
+        seaItems={seaItems}
+        selectedSeaId={inspectedPoint ? selectedSeaId : null}
         onTelemetryChange={setTelemetry}
         onInspectPoint={(lng, lat) => void handleInspectPoint(lng, lat)}
         onViewportChange={handleViewportChange}
         onSelectWeather={handleSelectWeather}
         onSelectPeak={handleSelectPeak}
+        onSelectSea={handleSelectSea}
         countryMode={countryMode}
+        selectedCountryId={selectedCountry?.id ?? null}
+        onSelectCountry={(info, bbox) => void handleSelectCountry(info, bbox)}
         onCountryLoadingChange={setCountryLoading}
       />
 
@@ -637,6 +891,7 @@ export default function App() {
         weatherBadgeOpacity={weatherBadgeOpacity}
         weatherCacheCount={weatherCacheCount}
         peaksEnabled={peaksEnabled}
+        seasEnabled={seasEnabled}
         rainEnabled={rainEnabled}
         rainOpacity={rainOpacity}
         rainLoading={rainLoading}
@@ -654,6 +909,7 @@ export default function App() {
         onChangeWeatherBadgeOpacity={setWeatherBadgeOpacity}
         onClearWeatherCache={handleClearWeatherCache}
         onTogglePeaks={() => setPeaksEnabled((prev) => !prev)}
+        onToggleSeas={() => setSeasEnabled((prev) => !prev)}
         onToggleRain={() => setRainEnabled((prev) => !prev)}
         onChangeRainOpacity={setRainOpacity}
         onToggleClouds={() => setCloudsEnabled((prev) => !prev)}
@@ -706,12 +962,55 @@ export default function App() {
         </div>
       )}
 
-      {selectedPeak?.weather ? (
+      {compareFirst ? (
+        <CompareCard
+          first={compareFirst}
+          second={compareSecond}
+          onSwap={() => {
+            if (!compareSecond) return;
+            const prevFirst = compareFirst;
+            setCompareFirst(compareSecond);
+            setCompareSecond(prevFirst);
+          }}
+          onClearSecond={() => setCompareSecond(null)}
+          onClose={() => {
+            setCompareFirst(null);
+            setCompareSecond(null);
+          }}
+        />
+      ) : selectedCountry ? (
+        <CountryDetailCard
+          country={selectedCountry}
+          detail={countryDetail}
+          loading={countryDetailLoading}
+          onFocusCountry={() => {
+            if (selectedCountryBbox) {
+              mapHandleRef.current?.fitCountryBounds(selectedCountryBbox);
+            }
+          }}
+          onClose={() => {
+            countryAbortRef.current?.abort();
+            setSelectedCountry(null);
+            setSelectedCountryBbox(null);
+            setCountryDetail(null);
+            setCountryDetailLoading(false);
+          }}
+        />
+      ) : selectedPeak?.weather ? (
         <WeatherDetailCard
           weather={selectedPeak.weather}
           elevationMeters={selectedPeak.peak.elevation}
           refreshing={refreshingCity}
           onRefresh={(w) => void handleRefreshCityWeather(w)}
+          onStartCompare={() => {
+            if (!selectedPeak.weather) return;
+            handleStartCompare({
+              id: getPeakCacheId(selectedPeak.peak.id),
+              kind: 'peak',
+              weather: selectedPeak.weather,
+              elevationMeters: selectedPeak.peak.elevation,
+            });
+          }}
           onClose={() => setSelectedPeak(null)}
         />
       ) : selectedWeather ? (
@@ -719,6 +1018,13 @@ export default function App() {
           weather={selectedWeather}
           refreshing={refreshingCity}
           onRefresh={(w) => void handleRefreshCityWeather(w)}
+          onStartCompare={() =>
+            handleStartCompare({
+              id: selectedWeather.cityId,
+              kind: 'city',
+              weather: selectedWeather,
+            })
+          }
           onClose={() => setSelectedWeather(null)}
         />
       ) : inspectedPoint ? (
@@ -728,6 +1034,7 @@ export default function App() {
           onClose={() => {
             inspectAbortRef.current?.abort();
             setInspectedPoint(null);
+            setSelectedSeaId(null);
           }}
         />
       ) : null}

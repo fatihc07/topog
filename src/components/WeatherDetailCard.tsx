@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { RefreshCw, X } from 'lucide-react';
+import { ArrowLeftRight, RefreshCw, X } from 'lucide-react';
 import { WEATHER_CACHE_TTL_MS } from '../services/weatherCache';
 import { getWeatherMeta } from '../services/weatherService';
 import type { WeatherData } from '../types/weather';
+import { ForecastSection } from './ForecastSection';
 import { WeatherIcon } from './WeatherIcon';
 
 interface WeatherDetailCardProps {
@@ -11,6 +12,8 @@ interface WeatherDetailCardProps {
   refreshing: boolean;
   onRefresh: (weather: WeatherData) => void;
   onClose: () => void;
+  onStartCompare?: () => void;
+  isCompareSource?: boolean;
 }
 
 export function WeatherDetailCard({
@@ -19,8 +22,11 @@ export function WeatherDetailCard({
   refreshing,
   onRefresh,
   onClose,
+  onStartCompare,
+  isCompareSource,
 }: WeatherDetailCardProps) {
   const [now, setNow] = useState(() => Date.now());
+  const [forecastRefreshToken, setForecastRefreshToken] = useState(0);
 
   useEffect(() => {
     setNow(Date.now());
@@ -117,6 +123,13 @@ export function WeatherDetailCard({
         )}
       </div>
 
+      <ForecastSection
+        lat={weather.lat}
+        lng={weather.lng}
+        elevationMeters={elevationMeters}
+        refreshToken={forecastRefreshToken}
+      />
+
       <div
         className={`weather-cache-banner ${
           weather.source === 'cache' ? 'is-cache' : 'is-live'
@@ -134,12 +147,25 @@ export function WeatherDetailCard({
         <button
           type="button"
           className="btn-accent"
-          onClick={() => onRefresh(weather)}
+          onClick={() => {
+            setForecastRefreshToken((t) => t + 1);
+            onRefresh(weather);
+          }}
           disabled={refreshing}
         >
           <RefreshCw size={14} className={refreshing ? 'spin' : undefined} />
           <span>{refreshing ? 'Güncelleniyor...' : 'Şimdi Yenile'}</span>
         </button>
+        {onStartCompare && (
+          <button
+            type="button"
+            className={`btn-compare${isCompareSource ? ' active' : ''}`}
+            onClick={onStartCompare}
+          >
+            <ArrowLeftRight size={14} />
+            <span>Karşılaştır</span>
+          </button>
+        )}
       </div>
     </div>
   );

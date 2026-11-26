@@ -1,0 +1,506 @@
+[
+  {
+    "id": "black-sea-west",
+    "name": "Karadeniz (Batı)",
+    "region": "Türkiye / Karadeniz",
+    "lat": 42.2,
+    "lng": 30.8,
+    "priority": 1
+  },
+  {
+    "id": "black-sea-east",
+    "name": "Karadeniz (Doğu)",
+    "region": "Türkiye / Karadeniz",
+    "lat": 42.1,
+    "lng": 38.6,
+    "priority": 1
+  },
+  {
+    "id": "marmara-sea",
+    "name": "Marmara Denizi",
+    "region": "Türkiye",
+    "lat": 40.7,
+    "lng": 28.25,
+    "priority": 1
+  },
+  {
+    "id": "aegean-north",
+    "name": "Kuzey Ege",
+    "region": "Türkiye / Ege",
+    "lat": 39.75,
+    "lng": 25.45,
+    "priority": 1
+  },
+  {
+    "id": "aegean-south",
+    "name": "Güney Ege",
+    "region": "Türkiye / Ege",
+    "lat": 37.2,
+    "lng": 26.4,
+    "priority": 1
+  },
+  {
+    "id": "med-antalya",
+    "name": "Akdeniz (Antalya)",
+    "region": "Türkiye / Akdeniz",
+    "lat": 36.35,
+    "lng": 31.05,
+    "priority": 1
+  },
+  {
+    "id": "med-mersin",
+    "name": "Akdeniz (Mersin)",
+    "region": "Türkiye / Akdeniz",
+    "lat": 36.2,
+    "lng": 34.6,
+    "priority": 1
+  },
+  {
+    "id": "med-cyprus-south",
+    "name": "Akdeniz (Kıbrıs Güneyi)",
+    "region": "Doğu Akdeniz",
+    "lat": 34.15,
+    "lng": 33.2,
+    "priority": 1
+  },
+  {
+    "id": "black-sea-central",
+    "name": "Orta Karadeniz",
+    "region": "Karadeniz",
+    "lat": 43.1,
+    "lng": 34.5,
+    "priority": 2
+  },
+  {
+    "id": "sea-of-crete",
+    "name": "Girit Denizi",
+    "region": "Doğu Akdeniz",
+    "lat": 35.85,
+    "lng": 24.85,
+    "priority": 2
+  },
+  {
+    "id": "levantine-sea",
+    "name": "Levanten Denizi",
+    "region": "Doğu Akdeniz",
+    "lat": 33.5,
+    "lng": 29.2,
+    "priority": 2
+  },
+  {
+    "id": "ionian-sea",
+    "name": "İyon Denizi",
+    "region": "Akdeniz",
+    "lat": 37.6,
+    "lng": 18.6,
+    "priority": 1
+  },
+  {
+    "id": "adriatic-sea",
+    "name": "Adriyatik Denizi",
+    "region": "Akdeniz",
+    "lat": 42.8,
+    "lng": 15.5,
+    "priority": 1
+  },
+  {
+    "id": "tyrrhenian-sea",
+    "name": "Tiren Denizi",
+    "region": "Akdeniz",
+    "lat": 40.2,
+    "lng": 12.5,
+    "priority": 1
+  },
+  {
+    "id": "western-med",
+    "name": "Batı Akdeniz",
+    "region": "Akdeniz",
+    "lat": 39.4,
+    "lng": 5.2,
+    "priority": 1
+  },
+  {
+    "id": "alboran-sea",
+    "name": "Alboran Denizi",
+    "region": "Batı Akdeniz",
+    "lat": 36.0,
+    "lng": -3.5,
+    "priority": 2
+  },
+  {
+    "id": "red-sea-north",
+    "name": "Kızıldeniz (Kuzey)",
+    "region": "Orta Doğu",
+    "lat": 25.6,
+    "lng": 35.8,
+    "priority": 1
+  },
+  {
+    "id": "red-sea-south",
+    "name": "Kızıldeniz (Güney)",
+    "region": "Orta Doğu",
+    "lat": 16.8,
+    "lng": 40.8,
+    "priority": 2
+  },
+  {
+    "id": "persian-gulf",
+    "name": "Basra Körfezi",
+    "region": "Orta Doğu",
+    "lat": 26.8,
+    "lng": 51.8,
+    "priority": 1
+  },
+  {
+    "id": "caspian-sea",
+    "name": "Hazar Denizi",
+    "region": "Avrasya",
+    "lat": 41.5,
+    "lng": 51.0,
+    "priority": 2
+  },
+  {
+    "id": "north-sea",
+    "name": "Kuzey Denizi",
+    "region": "Kuzey Avrupa",
+    "lat": 56.2,
+    "lng": 3.5,
+    "priority": 1
+  },
+  {
+    "id": "baltic-sea",
+    "name": "Baltık Denizi",
+    "region": "Kuzey Avrupa",
+    "lat": 57.2,
+    "lng": 19.4,
+    "priority": 1
+  },
+  {
+    "id": "english-channel",
+    "name": "Manş Denizi",
+    "region": "Batı Avrupa",
+    "lat": 50.1,
+    "lng": -1.8,
+    "priority": 2
+  },
+  {
+    "id": "bay-of-biscay",
+    "name": "Biskay Körfezi",
+    "region": "Batı Avrupa",
+    "lat": 45.5,
+    "lng": -4.8,
+    "priority": 1
+  },
+  {
+    "id": "celtic-sea",
+    "name": "Kelt Denizi",
+    "region": "Batı Avrupa",
+    "lat": 50.2,
+    "lng": -8.0,
+    "priority": 2
+  },
+  {
+    "id": "norwegian-sea",
+    "name": "Norveç Denizi",
+    "region": "Kuzey Avrupa",
+    "lat": 66.5,
+    "lng": 4.5,
+    "priority": 1
+  },
+  {
+    "id": "barents-sea",
+    "name": "Barents Denizi",
+    "region": "Arktik",
+    "lat": 72.5,
+    "lng": 34.0,
+    "priority": 2
+  },
+  {
+    "id": "greenland-sea",
+    "name": "Grönland Denizi",
+    "region": "Kuzey Atlantik",
+    "lat": 71.0,
+    "lng": -10.0,
+    "priority": 2
+  },
+  {
+    "id": "iceland-south",
+    "name": "İzlanda Açıkları",
+    "region": "Kuzey Atlantik",
+    "lat": 62.2,
+    "lng": -20.5,
+    "priority": 2
+  },
+  {
+    "id": "north-atlantic-east",
+    "name": "Kuzey Atlantik (Azorlar)",
+    "region": "Atlantik Okyanusu",
+    "lat": 38.0,
+    "lng": -22.0,
+    "priority": 1
+  },
+  {
+    "id": "north-atlantic-west",
+    "name": "Kuzey Atlantik (Batı)",
+    "region": "Atlantik Okyanusu",
+    "lat": 38.5,
+    "lng": -66.0,
+    "priority": 1
+  },
+  {
+    "id": "labrador-sea",
+    "name": "Labrador Denizi",
+    "region": "Kuzey Atlantik",
+    "lat": 57.5,
+    "lng": -52.0,
+    "priority": 2
+  },
+  {
+    "id": "sargasso-sea",
+    "name": "Sargasso Denizi",
+    "region": "Atlantik Okyanusu",
+    "lat": 27.0,
+    "lng": -62.0,
+    "priority": 2
+  },
+  {
+    "id": "gulf-of-mexico",
+    "name": "Meksika Körfezi",
+    "region": "Kuzey Amerika",
+    "lat": 25.0,
+    "lng": -90.0,
+    "priority": 1
+  },
+  {
+    "id": "caribbean-sea",
+    "name": "Karayip Denizi",
+    "region": "Orta Amerika",
+    "lat": 15.5,
+    "lng": -75.0,
+    "priority": 1
+  },
+  {
+    "id": "canary-offshore",
+    "name": "Kanarya Açıkları",
+    "region": "Doğu Atlantik",
+    "lat": 28.5,
+    "lng": -20.0,
+    "priority": 2
+  },
+  {
+    "id": "gulf-of-guinea",
+    "name": "Gine Körfezi",
+    "region": "Batı Afrika",
+    "lat": 2.5,
+    "lng": 2.5,
+    "priority": 1
+  },
+  {
+    "id": "south-atlantic-west",
+    "name": "Güney Atlantik (Brezilya)",
+    "region": "Güney Amerika",
+    "lat": -24.0,
+    "lng": -38.0,
+    "priority": 1
+  },
+  {
+    "id": "south-atlantic-east",
+    "name": "Güney Atlantik (Ümit Burnu)",
+    "region": "Güney Afrika",
+    "lat": -35.5,
+    "lng": 15.5,
+    "priority": 1
+  },
+  {
+    "id": "drake-passage",
+    "name": "Drake Geçidi",
+    "region": "Güney Okyanusu",
+    "lat": -58.5,
+    "lng": -64.0,
+    "priority": 2
+  },
+  {
+    "id": "arabian-sea",
+    "name": "Arap Denizi",
+    "region": "Hint Okyanusu",
+    "lat": 16.0,
+    "lng": 64.0,
+    "priority": 1
+  },
+  {
+    "id": "gulf-of-aden",
+    "name": "Aden Körfezi",
+    "region": "Hint Okyanusu",
+    "lat": 12.5,
+    "lng": 47.5,
+    "priority": 2
+  },
+  {
+    "id": "bay-of-bengal",
+    "name": "Bengal Körfezi",
+    "region": "Hint Okyanusu",
+    "lat": 14.5,
+    "lng": 87.5,
+    "priority": 1
+  },
+  {
+    "id": "andaman-sea",
+    "name": "Andaman Denizi",
+    "region": "Güneydoğu Asya",
+    "lat": 10.5,
+    "lng": 96.0,
+    "priority": 2
+  },
+  {
+    "id": "indian-ocean-central",
+    "name": "Hint Okyanusu (Orta)",
+    "region": "Hint Okyanusu",
+    "lat": -10.0,
+    "lng": 75.0,
+    "priority": 1
+  },
+  {
+    "id": "mozambique-channel",
+    "name": "Mozambik Kanalı",
+    "region": "Doğu Afrika",
+    "lat": -18.5,
+    "lng": 40.5,
+    "priority": 1
+  },
+  {
+    "id": "indian-ocean-se",
+    "name": "Hint Okyanusu (Avustralya Batı)",
+    "region": "Hint Okyanusu",
+    "lat": -27.0,
+    "lng": 108.0,
+    "priority": 2
+  },
+  {
+    "id": "java-sea",
+    "name": "Java Denizi",
+    "region": "Güneydoğu Asya",
+    "lat": -5.2,
+    "lng": 111.5,
+    "priority": 2
+  },
+  {
+    "id": "timor-sea",
+    "name": "Timor Denizi",
+    "region": "Okyanusya",
+    "lat": -11.0,
+    "lng": 127.0,
+    "priority": 2
+  },
+  {
+    "id": "sea-of-japan",
+    "name": "Japon Denizi",
+    "region": "Doğu Asya",
+    "lat": 39.5,
+    "lng": 134.5,
+    "priority": 1
+  },
+  {
+    "id": "yellow-sea",
+    "name": "Sarı Deniz",
+    "region": "Doğu Asya",
+    "lat": 35.5,
+    "lng": 123.5,
+    "priority": 2
+  },
+  {
+    "id": "east-china-sea",
+    "name": "Doğu Çin Denizi",
+    "region": "Doğu Asya",
+    "lat": 28.5,
+    "lng": 125.0,
+    "priority": 1
+  },
+  {
+    "id": "south-china-sea",
+    "name": "Güney Çin Denizi",
+    "region": "Güneydoğu Asya",
+    "lat": 14.5,
+    "lng": 114.5,
+    "priority": 1
+  },
+  {
+    "id": "philippine-sea",
+    "name": "Filipin Denizi",
+    "region": "Batı Pasifik",
+    "lat": 20.0,
+    "lng": 132.0,
+    "priority": 1
+  },
+  {
+    "id": "sea-of-okhotsk",
+    "name": "Ohotsk Denizi",
+    "region": "Kuzey Pasifik",
+    "lat": 53.0,
+    "lng": 148.5,
+    "priority": 2
+  },
+  {
+    "id": "bering-sea",
+    "name": "Bering Denizi",
+    "region": "Kuzey Pasifik",
+    "lat": 58.0,
+    "lng": -174.0,
+    "priority": 2
+  },
+  {
+    "id": "gulf-of-alaska",
+    "name": "Alaska Körfezi",
+    "region": "Kuzey Pasifik",
+    "lat": 56.5,
+    "lng": -145.0,
+    "priority": 1
+  },
+  {
+    "id": "north-pacific-hawaii",
+    "name": "Kuzey Pasifik (Hawaii)",
+    "region": "Pasifik Okyanusu",
+    "lat": 22.5,
+    "lng": -155.0,
+    "priority": 1
+  },
+  {
+    "id": "california-offshore",
+    "name": "Kaliforniya Açıkları",
+    "region": "Doğu Pasifik",
+    "lat": 34.0,
+    "lng": -123.5,
+    "priority": 1
+  },
+  {
+    "id": "south-pacific-peru",
+    "name": "Güney Pasifik (Peru Açıkları)",
+    "region": "Doğu Pasifik",
+    "lat": -14.0,
+    "lng": -80.5,
+    "priority": 1
+  },
+  {
+    "id": "coral-sea",
+    "name": "Mercan Denizi",
+    "region": "Okyanusya",
+    "lat": -17.5,
+    "lng": 154.5,
+    "priority": 1
+  },
+  {
+    "id": "tasman-sea",
+    "name": "Tasman Denizi",
+    "region": "Okyanusya",
+    "lat": -38.0,
+    "lng": 160.5,
+    "priority": 1
+  },
+  {
+    "id": "south-pacific-central",
+    "name": "Güney Pasifik (Polinezya)",
+    "region": "Pasifik Okyanusu",
+    "lat": -18.0,
+    "lng": -145.0,
+    "priority": 2
+  }
+]

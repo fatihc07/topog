@@ -200,3 +200,131 @@ export async function fetchMarineData(
 
   return entry;
 }
+
+export async function fetchMarineBatch(
+  points: Array<{ id: string; lat: number; lng: number }>,
+  options?: { forceRefresh?: boolean; signal?: AbortSignal }
+): Promise<{
+  results: Map<string, MarineData>;
+  fromCacheCount: number;
+  fetchedCount: number;
+}> {
+  const results = new Map<string, MarineData>();
+  if (points.length === 0) {
+    return { results, fromCacheCount: 0, fetchedCount: 0 };
+  }
+
+  const now = Date.now();
+  hydrateFromStorage(now);
+
+  const forceRefresh = options?.forceRefresh ?? false;
+  const missing: Array<{ id: string; lat: number; lng: number; key: string }> = [];
+  let fromCacheCount = 0;
+  let evictedAny = false;
+
+  for (const point of points) {
+    if (!Number.isFinite(point.lat) || !Number.isFinite(point.lng)) {
+      continue;
+    }
+
+    const key = makeMarineKey(point.lat, point.lng);
+    if (!forceRefresh) {
+      const cached = memoryCache.get(key);
+      if (cached) {
+        if (now - cached.fetchedAt < MARINE_CACHE_TTL_MS) {
+          results.set(point.id, {
+            ...cached,
+            source: 'cache',
+          });
+          fromCacheCount += 1;
+          continue;
+        }
+        memoryCache.delete(key);
+        evictedAny = true;
+      }
+    }
+
+    missing.push({ ...point, key });
+  }
+
+  let fetchedCount = 0;
+
+  if (missing.length > 0) {
+    try {
+      const lats = missing.map((p) => p.lat.toFixed(4)).join(',');
+      const lngs = missing.map((p) => p.lng.toFixed(4)).join(',');
+      const url =
+        `https://marine-api.open-meteo.com/v1/marine` +
+        `?latitude=${lats}` +
+        `&longitude=${lngs}` +
+        `&current=wave_height,wave_direction,wave_period,sea_surface_temperature`;
+
+      const response = await fetch(url, {
+        signal: options?.signal,
+        headers: { Accept: 'application/json' },
+      });
+
+      if (response.ok) {
+        const raw = (await response.json()) as
+          | OpenMeteoMarineResponse
+          | OpenMeteoMarineResponse[];
+        // Open-Meteo returns an object for 1 coordinate and an array for 2+ coordinates
+        const list = Array.isArray(raw) ? raw : [raw];
+        const fetchedAt = Date.now();
+        let wroteAny = false;
+
+        for (let i = 0; i < missing.length; i++) {
+          const point = missing[i];
+          const current = list[i]?.current;
+
+          const seaTempC = toFiniteNumber(current?.sea_surface_temperature);
+          const waveHeightM = toFiniteNumber(current?.wave_height);
+          const wavePeriodS = toFiniteNumber(current?.wave_period);
+          const waveDirectionDeg = toFiniteNumber(current?.wave_direction);
+
+          // Strict rule: never fabricate marine data for inland/non-marine coordinates.
+          if (seaTempC === null && waveHeightM === null) {
+            continue;
+          }
+
+          const entry: MarineData = {
+            key: point.key,
+            lat: point.lat,
+            lng: point.lng,
+            seaTempC,
+            waveHeightM,
+            wavePeriodS,
+            waveDirectionDeg,
+            fetchedAt,
+            source: 'live',
+          };
+
+          memoryCache.set(point.key, entry);
+          results.set(point.id, entry);
+          fetchedCount += 1;
+          wroteAny = true;
+        }
+
+        if (wroteAny || evictedAny) {
+          persistToStorage(fetchedAt);
+        }
+      } else if (evictedAny) {
+        persistToStorage(now);
+      }
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') throw err;
+      if (evictedAny) {
+        persistToStorage(now);
+      }
+      // On transient failure, return any cached results without fabricating data
+    }
+  } else if (evictedAny) {
+    persistToStorage(now);
+  }
+
+  return {
+    results,
+    fromCacheCount,
+    fetchedCount,
+  };
+}

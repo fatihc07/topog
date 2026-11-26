@@ -7,9 +7,24 @@ export interface ReleaseEntry {
   removed: string[];
 }
 
-export const APP_VERSION = 'T 4.3';
+export const APP_VERSION = 'T 5.0';
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
+  {
+    version: 'T 5.0',
+    date: '2026-11-26',
+    title: 'Ülke Bilgi Kartı, 24 Saat / 7 Gün Hava Tahmini, Deniz Suyu Rozetleri & Karşılaştırma Modu',
+    added: [
+      'Ülke Bilgi Kartı & Odaklanma (src/services/countryDetailService.ts, src/components/CountryDetailCard.tsx, src/config/layers.ts, src/components/MapCanvas.tsx): Ülke Modu açıkken tıklanan ülkenin seçili sınır vurgusu (selected feature-state), antimeridyen güvenli tam sınır odaklanması (fitCountryBounds), başkent/nüfus/yüzölçümü/yerel saat/para birimi ve başkentin gerçek anlık hava durumu (REST Countries + Open-Meteo, 15 dk TTL önbellek).',
+      '24 Saatlik & 7 Günlük Hava Tahmini (src/services/forecastService.ts, src/components/ForecastSection.tsx, src/components/WeatherDetailCard.tsx): Şehir ve dağ detay kartı içinde 24 Saat sıcaklık/yağış olasılığı SVG grafiği ve 7 Gün termal aralık çubuklu tahmin şeridi (Open-Meteo, 15 dk TTL önbellek).',
+      'Haritada Deniz Suyu & Dalga Rozetleri (src/data/worldSeas.json, src/services/seaIndex.ts, src/services/marineService.ts, src/components/LayerPanel.tsx): Katman panelindeki "Deniz Suyu & Dalgalar" anahtarıyla Türkiye ve dünya denizlerinde gerçek deniz suyu sıcaklığı ve dalga yüksekliği rozetleri (🌊, 15 dk TTL önbellek).',
+      'İki Şehir / İki Dağ Yan Yana Karşılaştırma (src/types/compare.ts, src/components/CompareCard.tsx, src/App.tsx): Herhangi bir şehir veya dağ kartından "Karşılaştır" ile haritadan ikinci noktayı seçip sıcaklık, hissedilen, nem, rüzgar, basınç, rakım ve kar kalınlığını fark rozetleriyle yan yana kıyaslama.',
+    ],
+    changed: [
+      'Detay ve karşılaştırma kartları için kaydırılabilir duyarlı masaüstü ve mobil düzen (max-height / 55vh) eklendi.',
+    ],
+    removed: [],
+  },
   {
     version: 'T 4.3',
     date: '2026-11-25',

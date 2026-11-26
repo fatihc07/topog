@@ -15,6 +15,7 @@ import {
   loadCountriesGeoJson,
   type CountryHoverInfo,
 } from '../services/countryService';
+import type { SeaDisplayItem } from '../services/seaIndex';
 import { buildNightPolygonGeoJson } from '../services/solarService';
 import { getWeatherMeta } from '../services/weatherService';
 import type { BaseLayerId, FlyTarget, TelemetryState } from '../types/map';
@@ -26,11 +27,111 @@ import type {
 } from '../types/weather';
 import { getAnimatedWeatherSvg } from './WeatherIcon';
 
+function extractCountryHoverInfo(
+  id: number,
+  properties: Record<string, unknown> | undefined
+): CountryHoverInfo {
+  const props = properties ?? {};
+  const iso = typeof props.iso === 'string' ? props.iso : '';
+  const nameTr = typeof props.nameTr === 'string' ? props.nameTr : '';
+  const nameEn = typeof props.nameEn === 'string' ? props.nameEn : '';
+  const continent = typeof props.continent === 'string' ? props.continent : '';
+  return {
+    id,
+    iso,
+    nameTr,
+    nameEn,
+    continent,
+    flag: isoToFlagEmoji(iso),
+  };
+}
+
+function computeFeatureBbox(
+  geoJson: GeoJSON.FeatureCollection | null,
+  featureId: number
+): [number, number, number, number] | null {
+  if (!geoJson) return null;
+  const feature = geoJson.features.find((f) => f.id === featureId);
+  if (!feature?.geometry) return null;
+
+  const rings: GeoJSON.Position[][] = [];
+  if (feature.geometry.type === 'Polygon') {
+    if (feature.geometry.coordinates[0]) {
+      rings.push(feature.geometry.coordinates[0]);
+    }
+  } else if (feature.geometry.type === 'MultiPolygon') {
+    for (const poly of feature.geometry.coordinates) {
+      if (poly[0]) rings.push(poly[0]);
+    }
+  }
+  if (rings.length === 0) return null;
+
+  let minLng = Infinity;
+  let minLat = Infinity;
+  let maxLng = -Infinity;
+  let maxLat = -Infinity;
+  let wMinLng = Infinity;
+  let wMaxLng = -Infinity;
+
+  let bestRingBbox: [number, number, number, number] | null = null;
+  let bestRingArea = -1;
+
+  for (const ring of rings) {
+    let rMinLng = Infinity;
+    let rMinLat = Infinity;
+    let rMaxLng = -Infinity;
+    let rMaxLat = -Infinity;
+
+    for (const pt of ring) {
+      const lng = pt[0];
+      const lat = pt[1];
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
+
+      if (lng < minLng) minLng = lng;
+      if (lng > maxLng) maxLng = lng;
+      if (lat < minLat) minLat = lat;
+      if (lat > maxLat) maxLat = lat;
+
+      const wrappedLng = lng < 0 ? lng + 360 : lng;
+      if (wrappedLng < wMinLng) wMinLng = wrappedLng;
+      if (wrappedLng > wMaxLng) wMaxLng = wrappedLng;
+
+      if (lng < rMinLng) rMinLng = lng;
+      if (lng > rMaxLng) rMaxLng = lng;
+      if (lat < rMinLat) rMinLat = lat;
+      if (lat > rMaxLat) rMaxLat = lat;
+    }
+
+    if (Number.isFinite(rMinLng) && rMaxLng - rMinLng <= 180) {
+      const area = (rMaxLng - rMinLng) * (rMaxLat - rMinLat);
+      if (area > bestRingArea) {
+        bestRingArea = area;
+        bestRingBbox = [rMinLng, rMinLat, rMaxLng, rMaxLat];
+      }
+    }
+  }
+
+  if (!Number.isFinite(minLng) || !Number.isFinite(minLat)) return null;
+
+  if (maxLng - minLng <= 180) {
+    return [minLng, minLat, maxLng, maxLat];
+  }
+
+  // Antimeridian-spanning countries (e.g. Russia, USA, Fiji): prefer wrapped [0..360] span if <= 180°
+  if (wMaxLng - wMinLng <= 180) {
+    return [wMinLng, minLat, wMaxLng, maxLat];
+  }
+
+  // Global-territory countries (e.g. France): fall back to primary mainland ring
+  return bestRingBbox ?? [minLng, minLat, maxLng, maxLat];
+}
+
 export interface MapCanvasHandle {
   zoomIn: () => void;
   zoomOut: () => void;
   resetNorthPitch: () => void;
   geolocate: () => void;
+  fitCountryBounds: (bbox: [number, number, number, number]) => void;
 }
 
 interface MapCanvasProps {
@@ -56,12 +157,20 @@ interface MapCanvasProps {
   selectedWeatherCityId: string | null;
   peakItems: PeakDisplayItem[];
   selectedPeakId: string | null;
+  seaItems: SeaDisplayItem[];
+  selectedSeaId: string | null;
   onTelemetryChange: (telemetry: TelemetryState) => void;
   onInspectPoint: (lng: number, lat: number) => void;
   onViewportChange: (bounds: ViewportBounds) => void;
   onSelectWeather: (item: WeatherData) => void;
   onSelectPeak: (item: PeakDisplayItem) => void;
+  onSelectSea: (item: SeaDisplayItem) => void;
   countryMode: boolean;
+  selectedCountryId: number | null;
+  onSelectCountry: (
+    info: CountryHoverInfo,
+    bbox: [number, number, number, number] | null
+  ) => void;
   onCountryLoadingChange?: (loading: boolean) => void;
 }
 
@@ -90,12 +199,17 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
       selectedWeatherCityId,
       peakItems,
       selectedPeakId,
+      seaItems,
+      selectedSeaId,
       onTelemetryChange,
       onInspectPoint,
       onViewportChange,
       onSelectWeather,
       onSelectPeak,
+      onSelectSea,
       countryMode,
+      selectedCountryId,
+      onSelectCountry,
       onCountryLoadingChange,
     },
     ref
@@ -106,12 +220,15 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
     const markerRef = useRef<maplibregl.Marker | null>(null);
     const weatherMarkersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
     const peakMarkersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
+    const seaMarkersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
     const mountedRadarIdsRef = useRef<Set<string>>(new Set());
     const isLoadedRef = useRef(false);
     const terrainRef = useRef(terrain3D);
     const countryModeRef = useRef(countryMode);
     const countriesLoadedRef = useRef(false);
+    const countriesGeoJsonRef = useRef<GeoJSON.FeatureCollection | null>(null);
     const hoveredCountryIdRef = useRef<number | null>(null);
+    const selectedCountryIdRef = useRef<number | null>(null);
     const countryTooltipRef = useRef<HTMLDivElement | null>(null);
     const tooltipPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
     const [hoveredCountry, setHoveredCountry] =
@@ -121,6 +238,8 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
     const onViewportRef = useRef(onViewportChange);
     const onSelectWeatherRef = useRef(onSelectWeather);
     const onSelectPeakRef = useRef(onSelectPeak);
+    const onSelectSeaRef = useRef(onSelectSea);
+    const onSelectCountryRef = useRef(onSelectCountry);
     const onCountryLoadingRef = useRef(onCountryLoadingChange);
 
     terrainRef.current = terrain3D;
@@ -130,6 +249,8 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
     onViewportRef.current = onViewportChange;
     onSelectWeatherRef.current = onSelectWeather;
     onSelectPeakRef.current = onSelectPeak;
+    onSelectSeaRef.current = onSelectSea;
+    onSelectCountryRef.current = onSelectCountry;
     onCountryLoadingRef.current = onCountryLoadingChange;
 
     const clearCountryHover = () => {
@@ -195,6 +316,39 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
             // Geolocation permission denied or unavailable
           },
           { enableHighAccuracy: true, timeout: 8000 }
+        );
+      },
+      fitCountryBounds: (bbox) => {
+        const map = mapRef.current;
+        if (!map) return;
+        let west = bbox[0];
+        const south = bbox[1];
+        let east = bbox[2];
+        const north = bbox[3];
+        if (east - west > 180) {
+          const wWest = west < 0 ? west + 360 : west;
+          const wEast = east < 0 ? east + 360 : east;
+          if (Math.abs(wEast - wWest) <= 180) {
+            west = Math.min(wWest, wEast);
+            east = Math.max(wWest, wEast);
+          }
+        }
+        const cw = containerRef.current?.clientWidth ?? window.innerWidth;
+        const ch = containerRef.current?.clientHeight ?? window.innerHeight;
+        const isNarrow = cw < 820 || ch < 480;
+        const padding = isNarrow
+          ? 48
+          : { top: 70, bottom: 70, left: 370, right: 350 };
+        map.fitBounds(
+          [
+            [west, south],
+            [east, north],
+          ],
+          {
+            padding,
+            maxZoom: 6.5,
+            duration: 1100,
+          }
         );
       },
     }));
@@ -309,22 +463,12 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
                 { hover: true }
               );
               hoveredCountryIdRef.current = top.id;
-              const props = (top.properties ?? {}) as Record<string, unknown>;
-              const iso = typeof props.iso === 'string' ? props.iso : '';
-              const nameTr =
-                typeof props.nameTr === 'string' ? props.nameTr : '';
-              const nameEn =
-                typeof props.nameEn === 'string' ? props.nameEn : '';
-              const continent =
-                typeof props.continent === 'string' ? props.continent : '';
-              setHoveredCountry({
-                id: top.id,
-                iso,
-                nameTr,
-                nameEn,
-                continent,
-                flag: isoToFlagEmoji(iso),
-              });
+              setHoveredCountry(
+                extractCountryHoverInfo(
+                  top.id,
+                  top.properties as Record<string, unknown> | undefined
+                )
+              );
             }
             map.getCanvas().style.cursor = 'pointer';
           } else {
@@ -355,6 +499,25 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
       });
 
       map.on('click', (e) => {
+        if (
+          countryModeRef.current &&
+          countriesLoadedRef.current &&
+          map.getLayer('countries-fill')
+        ) {
+          const features = map.queryRenderedFeatures(e.point, {
+            layers: ['countries-fill'],
+          });
+          const top = features[0];
+          if (top && typeof top.id === 'number') {
+            const info = extractCountryHoverInfo(
+              top.id,
+              top.properties as Record<string, unknown> | undefined
+            );
+            const bbox = computeFeatureBbox(countriesGeoJsonRef.current, top.id);
+            onSelectCountryRef.current(info, bbox);
+            return;
+          }
+        }
         onInspectRef.current(e.lngLat.lng, e.lngLat.lat);
       });
 
@@ -364,7 +527,9 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
         canvasEl.removeEventListener('mouseleave', handleCanvasMouseLeave);
         if (rafId !== null) cancelAnimationFrame(rafId);
         hoveredCountryIdRef.current = null;
+        selectedCountryIdRef.current = null;
         countriesLoadedRef.current = false;
+        countriesGeoJsonRef.current = null;
         markerRef.current?.remove();
         markerRef.current = null;
         for (const m of weatherMarkersRef.current.values()) {
@@ -375,6 +540,10 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
           m.remove();
         }
         peakMarkersRef.current.clear();
+        for (const m of seaMarkersRef.current.values()) {
+          m.remove();
+        }
+        seaMarkersRef.current.clear();
         mountedRadarIdsRef.current.clear();
         setMapInstance(null);
         map.remove();
@@ -512,6 +681,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
         loadCountriesGeoJson()
           .then((data) => {
             if (cancelled || !mapRef.current) return;
+            countriesGeoJsonRef.current = data;
             const src = map.getSource('countries-source') as
               | maplibregl.GeoJSONSource
               | undefined;
@@ -541,6 +711,29 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
         cancelled = true;
       };
     }, [countryMode, mapInstance]);
+
+    // Sync selected country feature-state highlight
+    useEffect(() => {
+      const map = mapRef.current;
+      if (!map || !map.getSource('countries-source')) return;
+
+      const prevId = selectedCountryIdRef.current;
+      if (prevId !== null && (prevId !== selectedCountryId || !countryMode)) {
+        map.setFeatureState(
+          { source: 'countries-source', id: prevId },
+          { selected: false }
+        );
+        selectedCountryIdRef.current = null;
+      }
+
+      if (countryMode && selectedCountryId !== null) {
+        map.setFeatureState(
+          { source: 'countries-source', id: selectedCountryId },
+          { selected: true }
+        );
+        selectedCountryIdRef.current = selectedCountryId;
+      }
+    }, [selectedCountryId, countryMode, mapInstance]);
 
     // Sync NASA GIBS / SSEC RealEarth Cloud Cover overlay
     useEffect(() => {
@@ -886,6 +1079,104 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
         }
       }
     }, [peakItems, selectedPeakId]);
+
+    // Reconcile sea temperature & wave height markers
+    useEffect(() => {
+      const map = mapRef.current;
+      if (!map) return;
+
+      const markers = seaMarkersRef.current;
+      const incomingIds = new Set(seaItems.map((s) => s.sea.id));
+
+      for (const [id, existingMarker] of markers.entries()) {
+        if (!incomingIds.has(id)) {
+          existingMarker.remove();
+          markers.delete(id);
+        }
+      }
+
+      for (const item of seaItems) {
+        const { sea, marine } = item;
+        const isSelected = sea.id === selectedSeaId;
+        const existing = markers.get(sea.id);
+
+        const buildSeaContent = (btn: HTMLButtonElement) => {
+          btn.className = `sea-badge${isSelected ? ' selected' : ''}`;
+          const parts = [`${sea.name} (${sea.region})`];
+          if (typeof marine.seaTempC === 'number') {
+            parts.push(`Su: ${Math.round(marine.seaTempC)}°C`);
+          }
+          if (typeof marine.waveHeightM === 'number') {
+            parts.push(`Dalga: ${marine.waveHeightM.toFixed(1)} m`);
+          }
+          const sourceLabel = marine.source === 'cache' ? 'Bellekten' : 'Canlı';
+          btn.title = `${parts.join(' · ')} (${sourceLabel})`;
+          btn.innerHTML = '';
+
+          const iconSpan = document.createElement('span');
+          iconSpan.className = 'sea-badge-icon';
+          iconSpan.setAttribute('aria-hidden', 'true');
+          iconSpan.textContent = '🌊';
+
+          const nameSpan = document.createElement('span');
+          nameSpan.className = 'sea-badge-name';
+          nameSpan.textContent = sea.name;
+
+          btn.append(iconSpan, nameSpan);
+
+          if (typeof marine.seaTempC === 'number') {
+            const tempSpan = document.createElement('span');
+            tempSpan.className = 'sea-badge-temp';
+            tempSpan.textContent = `${Math.round(marine.seaTempC)}°`;
+            btn.append(tempSpan);
+          }
+
+          if (typeof marine.waveHeightM === 'number') {
+            const waveSpan = document.createElement('span');
+            waveSpan.className = 'sea-badge-wave';
+            waveSpan.textContent = `${marine.waveHeightM.toFixed(1)} m`;
+            btn.append(waveSpan);
+          }
+
+          const dotSpan = document.createElement('span');
+          dotSpan.className = `cache-dot ${
+            marine.source === 'cache' ? 'cached' : 'live'
+          }`;
+          btn.append(dotSpan);
+
+          btn.onclick = (ev) => {
+            ev.stopPropagation();
+            onSelectSeaRef.current(item);
+          };
+        };
+
+        if (existing) {
+          existing.setLngLat([sea.lng, sea.lat]);
+          const btn = existing.getElement().firstElementChild as HTMLButtonElement | null;
+          if (btn) buildSeaContent(btn);
+        } else {
+          const wrapper = document.createElement('div');
+          wrapper.className = 'weather-marker-anchor';
+
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          buildSeaContent(btn);
+
+          const pin = document.createElement('span');
+          pin.className = 'sea-marker-pin';
+
+          wrapper.append(btn, pin);
+
+          const marker = new maplibregl.Marker({
+            element: wrapper,
+            anchor: 'bottom',
+          })
+            .setLngLat([sea.lng, sea.lat])
+            .addTo(map);
+          markers.set(sea.id, marker);
+        }
+      }
+    }, [seaItems, selectedSeaId]);
 
     return (
       <>
