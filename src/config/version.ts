@@ -7,9 +7,26 @@ export interface ReleaseEntry {
   removed: string[];
 }
 
-export const APP_VERSION = 'T 5.0';
+export const APP_VERSION = 'T 5.1';
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
+  {
+    version: 'T 5.1',
+    date: '2026-11-26',
+    title: 'Favori Yerler, Arama Geçmişi, Mini Konum Haritası, Birleşik Önbellek & Bundle/Hook Mimarisi',
+    added: [
+      'Favori Yerler (src/services/favoritesService.ts, SearchBar.tsx, WeatherDetailCard.tsx, InspectCard.tsx, CountryDetailCard.tsx): Şehir, dağ, deniz, ülke ve nokta kartlarına yıldız butonu eklendi; yıldızlanan yerler topog_favorites_v1 (localStorage, max 20) içinde saklanır ve arama çubuğu altında .favorites-strip şeridinde listelenir.',
+      'Arama Geçmişi (src/services/searchHistoryService.ts, SearchBar.tsx): Arama kutusuna odaklanıldığında son aranan 8 yer (topog_search_history_v1, tekil silme ve Temizle) gösterilir.',
+      'Mini Konum Haritası / Overview Map (src/components/OverviewMap.tsx): Yüksek yakınlaştırmada (z >= 4.5) ekstra WebGL bağlamı açmadan 2D Canvas ile dünya konumu, görünüm dikdörtgeni ve tıklayarak odaklanma sunar (<= 1040px ekranlarda gizlenir).',
+      'Birleşik Önbellek Sayacı & Temizleme (src/services/cacheStats.ts, countryDetailService.ts, forecastService.ts, LayerPanel.tsx): Şehir/dağ, deniz, ülke ve 24s/7g tahmin 15 dk TTL önbellekleri tek toplam ve alt kırılımla (getAllCacheStats / clearAllAppCaches) yönetilir.',
+    ],
+    changed: [
+      'Vite Bundle Bölme (vite.config.ts): Tek parça paket vendor-maplibre, vendor-react, vendor-icons, data-cities ve ana index parçalarına ayrıldı.',
+      'Özel Hook Refaktörü (src/hooks/useViewportDataSync.ts, src/hooks/useCountrySelection.ts, src/App.tsx): Harita görünümü veri senkronu ve ülke seçimi AbortController yaşam döngüsüyle modüler React hooklarına ayrıştırıldı.',
+      'qa-verifier denetimi sonrası .overview-map-dock konumlaması ve useViewportDataSync 250 ms debounce ref koruması düzeltildi.',
+    ],
+    removed: [],
+  },
   {
     version: 'T 5.0',
     date: '2026-11-26',

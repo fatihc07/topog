@@ -1,4 +1,4 @@
-import { Loader2, MapPin, Mountain, X } from 'lucide-react';
+import { Loader2, MapPin, Mountain, Star, X } from 'lucide-react';
 import type { InspectedPoint } from '../types/map';
 import { MarineSection } from './MarineSection';
 
@@ -6,6 +6,8 @@ interface InspectCardProps {
   point: InspectedPoint;
   onZoom3D: (lng: number, lat: number) => void;
   onClose: () => void;
+  isFavorite?: boolean;
+  onToggleFavorite?: () => void;
 }
 
 function formatCoord(value: number, posLabel: string, negLabel: string): string {
@@ -13,7 +15,13 @@ function formatCoord(value: number, posLabel: string, negLabel: string): string 
   return `${Math.abs(value).toFixed(4)}° ${dir}`;
 }
 
-export function InspectCard({ point, onZoom3D, onClose }: InspectCardProps) {
+export function InspectCard({
+  point,
+  onZoom3D,
+  onClose,
+  isFavorite,
+  onToggleFavorite,
+}: InspectCardProps) {
   const latStr = formatCoord(point.lat, 'K', 'G');
   const lngStr = formatCoord(point.lng, 'D', 'B');
 
@@ -32,14 +40,27 @@ export function InspectCard({ point, onZoom3D, onClose }: InspectCardProps) {
               : point.placeName || 'Seçili Coğrafi Nokta'}
           </div>
         </div>
-        <button
-          type="button"
-          className="icon-btn-inline"
-          onClick={onClose}
-          aria-label="Kapat"
-        >
-          <X size={15} />
-        </button>
+        <div className="card-header-actions">
+          {onToggleFavorite && (
+            <button
+              type="button"
+              className={`icon-btn-inline favorite-star-btn ${isFavorite ? 'is-fav' : ''}`}
+              onClick={onToggleFavorite}
+              title={isFavorite ? 'Favorilerden çıkar' : 'Favorilere ekle'}
+              aria-label={isFavorite ? 'Favorilerden çıkar' : 'Favorilere ekle'}
+            >
+              <Star size={15} fill={isFavorite ? '#fbbf24' : 'none'} />
+            </button>
+          )}
+          <button
+            type="button"
+            className="icon-btn-inline"
+            onClick={onClose}
+            aria-label="Kapat"
+          >
+            <X size={15} />
+          </button>
+        </div>
       </div>
 
       <div className="inspect-grid">

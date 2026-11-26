@@ -1,6 +1,6 @@
 # Topog — Dünya Fiziksel Haritası & Canlı Atmosfer Atlası
 
-**Aktif Sürüm:** `T 5.0` · **Sürüm Geçmişi:** [CHANGELOG.md](./CHANGELOG.md)
+**Aktif Sürüm:** `T 5.1` · **Sürüm Geçmişi:** [CHANGELOG.md](./CHANGELOG.md)
 
 Topog; tamamen ücretsiz, API anahtarı gerektirmeyen açık coğrafi ve meteorolojik veri kaynaklarıyla çalışan etkileşimli 2B/3B dünya fiziksel harita, canlı hava durumu, yağmur radarı ve uydu bulut örtüsü uygulamasıdır.
 
@@ -16,10 +16,11 @@ Topog; tamamen ücretsiz, API anahtarı gerektirmeyen açık coğrafi ve meteoro
   - **OpenStreetMap Standart** (Küresel yol ağı ve yerleşimler)
   - **Esri World Imagery** (Gerçek uydu görüntüleri)
 - **3D Arazi (DEM):** AWS Terrarium yükseklik karoları ile 3 boyutlu yeryüzü ve `1.0x – 3.0x` yükseklik abartısı kaydırıcısı.
-- **Gölgeli Kabartma (Hillshade)** ve **Küre Görünümü (Globe)** projeksiyonu.
+- **Gölgeli Kabartma (Hillshade)**, **Küre Görünümü (Globe)** ve **Mini Konum Haritası (Overview Map):** Yüksek yakınlaştırmada (`z >= 4.5`) ekstra WebGL bağlamı açmadan 2D Canvas üzerinde dünya konumu, görünüm dikdörtgeni ve tıklayarak hızlı odaklanma.
 - **Ülke Modu & Ülke Bilgi Kartı:** Natural Earth `ne_50m_admin_0_countries` tabanlı 242 ülke/bölge sınır verisi ([`public/data/countries.geojson`](./public/data/countries.geojson)); fareyle üzerine gelindiğinde parlak cam mavisi sınır vurgusu ve bayraklı Türkçe ülke adı/kıta kartı, tıklandığında seçili sınır vurgusu, tam sınır odaklanması, REST Countries üzerinden başkent/nüfus/yüzölçümü/yerel saat/para birimi ve başkentin gerçek anlık hava durumu (15 dk önbellekli).
-- **Arama, Odak ve Nokta İnceleme:**
-  - Nominatim ile canlı yer/dağ/şehir arama.
+- **Arama, Arama Geçmişi, Favori Yerler ve Nokta İnceleme:**
+  - Nominatim ile canlı yer/dağ/şehir arama ve `localStorage` tabanlı **Arama Geçmişi** (son 8 arama, tekil silme ve `Temizle`).
+  - Şehir, dağ, deniz, ülke ve nokta kartlarından yıldızlayarak **Favori Yerler** şeridine (max 20 yer) kaydetme.
   - Hızlı yer şekli odak çipleri (*Türkiye, Ağrı Dağı, Everest, Mont Blanc, Büyük Kanyon, Aconcagua*).
   - Haritada herhangi bir noktaya tıklayınca ters coğrafi kodlama ve Open-Meteo Elevation API üzerinden gerçek rakım (m) ölçümü.
   - **Canlı Deniz & Dalga Durumu:** Deniz/kıyı noktalarına tıklandığında Open-Meteo Marine API üzerinden gerçek deniz suyu sıcaklığı (`°C`), dalga yüksekliği (`m`), dalga periyodu (`sn`) ve dalga yönü (15 dakikalık önbellekli).
@@ -28,7 +29,7 @@ Topog; tamamen ücretsiz, API anahtarı gerektirmeyen açık coğrafi ve meteoro
 - **Küresel + Türkiye Kapsamı:** 4.964 küresel şehir/başkent ve 83 Türkiye yerleşimi ([`src/data/worldCities.json`](./src/data/worldCities.json)); `z10+` yakınlaştırmada ise merkezdeki ilçe/kasaba otomatik keşfedilir.
 - **Dağlar & Zirveler Katmanı:** 113 küresel zirve ve 34 Türkiye dağı ([`src/data/worldPeaks.json`](./src/data/worldPeaks.json)); `z5.0+` seviyesinde dağ adı, rakım, Open-Meteo `elevation` parametreli gerçek zirve sıcaklığı ve gerçek anlık kar kalınlığı (`❄ XX cm`), `z9.5+` seviyesinde OpenStreetMap Overpass ilave zirve keşfi ve altın üçgenli zirve rozetleri.
 - **Deniz Suyu & Dalgalar Katmanı:** Türkiye ve dünya denizlerinde ([`src/data/worldSeas.json`](./src/data/worldSeas.json)) gerçek deniz suyu sıcaklığı (`°C`) ve dalga yüksekliği (`m`) rozetleri (`🌊`, 15 dk önbellekli).
-- **15 Dakikalık Kalıcı Önbellek (RAM + `localStorage`):** Aynı bölgeye 15 dakika içinde dönüldüğünde API isteği atılmadan bellekten gösterilir; 15 dakika dolduğunda otomatik olarak güncel veri çekilir.
+- **15 Dakikalık Birleşik Kalıcı Önbellek (RAM + `localStorage`):** Şehir/dağ, deniz, ülke ve 24s/7g tahmin önbellekleri tek sayaç ve alt kırılımla yönetilir; aynı bölgeye 15 dakika içinde dönüldüğünde API isteği atılmadan bellekten gösterilir, süre dolunca otomatik yenilenir.
 - **Canlı Animasyonlu SVG İkonlar & Tam Konum Sabitleme:** Güneş, ay/yıldız, sürüklenen bulut, yağmur damlaları, kar taneleri, sis ve şimşek animasyonları haritada tam şehir koordinatına sabitlenir; Canlı Atlas rozetlerinde kompakt **`H XX°`** hissedilen sıcaklık göstergesi de yer alır.
 - **Arka Plan Şeffaflık Kontrolü (`%0 – %100`):** Yalnızca etiketin koyu arka planını saydamlaştırır; şehir/zirve adı, sıcaklık ve ikon her zaman `%100` net kalır.
 - **Detaylı Hava Durumu Kartı & 24 Saat / 7 Gün Tahmini:** Sıcaklık, hissedilen sıcaklık, nem, rüzgar, basınç, zirve rakımı ve kar kalınlığı/taze kar bilgisi, `24 Saat` sıcaklık/yağış olasılığı SVG grafiği, `7 Gün` termal aralık çubuklu tahmin şeridi, önbellekte kalan geçerlilik süresi, **Karşılaştır** ve **Şimdi Yenile** düğmeleri.
@@ -40,7 +41,7 @@ Topog; tamamen ücretsiz, API anahtarı gerektirmeyen açık coğrafi ve meteoro
 - **Canlı Bulut Örtüsü (Uydu IR):** SSEC RealEarth küresel jeostasyoner uydu IR bulut katmanı (`z8`'e kadar yüksek çözünürlük, özel `cloud-ir://` şeffaf bulut protokolü) ve `%20 – %100` şeffaflık ayarı.
 
 ### Sürüm Takibi
-- Uygulama içi sol üstteki **`T 5.0`** rozetine tıklayarak tüm sürüm notlarını (*Eklenenler / Yapılanlar / Çıkarılanlar*) görüntüleyebilirsiniz.
+- Uygulama içi sol üstteki **`T 5.1`** rozetine tıklayarak tüm sürüm notlarını (*Eklenenler / Yapılanlar / Çıkarılanlar*) görüntüleyebilirsiniz.
 - Proje kuralları ve uzman alt ajan rehberi [`AGENTS.md`](./AGENTS.md) ve [`.agents/agents/`](./.agents/agents/) içinde tutulur.
 
 ---

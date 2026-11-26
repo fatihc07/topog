@@ -169,6 +169,19 @@ export function computeLocalTimeFromUtcOffset(
   return formatUtcTimeWithOffsetMinutes(sign * (hours * 60 + minutes));
 }
 
+export function getCountryDetailCacheCount(now = Date.now()): number {
+  hydrateFromStorage(now);
+  let count = 0;
+  for (const [key, entry] of memoryCache.entries()) {
+    if (now - entry.fetchedAt < COUNTRY_CACHE_TTL_MS) {
+      count += 1;
+    } else {
+      memoryCache.delete(key);
+    }
+  }
+  return count;
+}
+
 export function clearCountryDetailCache(): void {
   hydrated = true;
   memoryCache.clear();

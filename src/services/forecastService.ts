@@ -146,6 +146,19 @@ function getFreshForecast(key: string, now = Date.now()): WeatherForecastData | 
   return null;
 }
 
+export function getForecastCacheCount(now = Date.now()): number {
+  hydrateFromStorage(now);
+  let count = 0;
+  for (const [key, entry] of memoryCache.entries()) {
+    if (now - entry.fetchedAt < FORECAST_CACHE_TTL_MS) {
+      count += 1;
+    } else {
+      memoryCache.delete(key);
+    }
+  }
+  return count;
+}
+
 export function clearForecastCache(): void {
   hydrated = true;
   memoryCache.clear();

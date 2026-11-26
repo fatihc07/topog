@@ -7,6 +7,25 @@ Sürüm numaralandırma kuralı: **`T <Büyük>.<Küçük>`**
 
 ---
 
+## [T 5.1] — 2026-11-26
+**Favori Yerler, Arama Geçmişi, Mini Konum Haritası, Birleşik Önbellek & Bundle/Hook Mimarisi**
+
+### Eklenenler
+- **Favori Yerler** (`src/services/favoritesService.ts`, `src/components/SearchBar.tsx`, `WeatherDetailCard.tsx`, `InspectCard.tsx`, `CountryDetailCard.tsx`): Şehir, dağ, deniz, ülke ve nokta kartlarına yıldız butonu eklendi; yıldızlanan yerler `topog_favorites_v1` (`localStorage`, max 20) içinde saklanır ve arama çubuğu altında `.favorites-strip` şeridinde listelenir.
+- **Arama Geçmişi** (`src/services/searchHistoryService.ts`, `src/components/SearchBar.tsx`): Arama kutusuna odaklanıldığında son aranan 8 yer (`topog_search_history_v1`, tekil silme ve `Temizle`) gösterilir.
+- **Mini Konum Haritası / Overview Map** (`src/components/OverviewMap.tsx`): Yüksek yakınlaştırmada (`z >= 4.5`) ekstra WebGL bağlamı açmadan 2D Canvas ile dünya konumu, görünüm dikdörtgeni ve tıklayarak odaklanma sunar (`top: 16px; right: 348px`, `<= 1040px` ekranlarda gizlenir).
+- **Birleşik Önbellek Sayacı & Temizleme** (`src/services/cacheStats.ts`, `countryDetailService.ts`, `forecastService.ts`, `LayerPanel.tsx`): Şehir/dağ, deniz, ülke ve 24s/7g tahmin 15 dk TTL önbellekleri tek toplam ve alt kırılımla (`getAllCacheStats` / `clearAllAppCaches`) yönetilir.
+
+### Yapılanlar / İyileştirmeler
+- **Vite Bundle Bölme (`manualChunks`)** (`vite.config.ts`): Tek parça paket `vendor-maplibre`, `vendor-react`, `vendor-icons`, `data-cities` ve ana `index` parçalarına bölündü.
+- **Özel Hook Refaktörü** (`src/hooks/useViewportDataSync.ts`, `src/hooks/useCountrySelection.ts`, `src/App.tsx`): Harita görünümü veri senkronu ve ülke seçimi `AbortController` yaşam döngüsüyle modüler React hook'larına ayrıştırıldı.
+- `qa-verifier` bulguları (`.overview-map-dock` masaüstü çakışma konumlaması + `useViewportDataSync` 250 ms debounce ref koruması) giderildi.
+
+### Çıkarılanlar
+- Bu sürümde kaldırılan bir özellik yoktur.
+
+---
+
 ## [T 5.0] — 2026-11-26
 **Büyük Sürüm — Ülke Bilgi Kartı, 24 Saat / 7 Gün Hava Tahmini, Deniz Suyu Rozetleri & Karşılaştırma Modu**
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeftRight, RefreshCw, X } from 'lucide-react';
+import { ArrowLeftRight, RefreshCw, Star, X } from 'lucide-react';
 import { WEATHER_CACHE_TTL_MS } from '../services/weatherCache';
 import { getWeatherMeta } from '../services/weatherService';
 import type { WeatherData } from '../types/weather';
@@ -14,6 +14,9 @@ interface WeatherDetailCardProps {
   onClose: () => void;
   onStartCompare?: () => void;
   isCompareSource?: boolean;
+  isFavorite?: boolean;
+  onToggleFavorite?: () => void;
+  onForecastSynced?: () => void;
 }
 
 export function WeatherDetailCard({
@@ -24,6 +27,9 @@ export function WeatherDetailCard({
   onClose,
   onStartCompare,
   isCompareSource,
+  isFavorite,
+  onToggleFavorite,
+  onForecastSynced,
 }: WeatherDetailCardProps) {
   const [now, setNow] = useState(() => Date.now());
   const [forecastRefreshToken, setForecastRefreshToken] = useState(0);
@@ -33,6 +39,14 @@ export function WeatherDetailCard({
     const id = window.setInterval(() => setNow(Date.now()), 30000);
     return () => window.clearInterval(id);
   }, [weather.cityId, weather.fetchedAt]);
+
+  useEffect(() => {
+    if (!onForecastSynced) return;
+    const timer = window.setTimeout(() => {
+      onForecastSynced();
+    }, 900);
+    return () => window.clearTimeout(timer);
+  }, [weather.lat, weather.lng, elevationMeters, forecastRefreshToken, onForecastSynced]);
 
   const meta = getWeatherMeta(weather.weatherCode, weather.isDay);
   const elapsedMs = Math.max(0, now - weather.fetchedAt);
@@ -76,6 +90,17 @@ export function WeatherDetailCard({
           <span className="weather-temp-big">
             {Math.round(weather.temperature)}°C
           </span>
+          {onToggleFavorite && (
+            <button
+              type="button"
+              className={`icon-btn-inline favorite-star-btn ${isFavorite ? 'is-fav' : ''}`}
+              onClick={onToggleFavorite}
+              title={isFavorite ? 'Favorilerden çıkar' : 'Favorilere ekle'}
+              aria-label={isFavorite ? 'Favorilerden çıkar' : 'Favorilere ekle'}
+            >
+              <Star size={15} fill={isFavorite ? '#fbbf24' : 'none'} />
+            </button>
+          )}
           <button
             type="button"
             className="icon-btn-inline"
@@ -150,6 +175,7 @@ export function WeatherDetailCard({
           onClick={() => {
             setForecastRefreshToken((t) => t + 1);
             onRefresh(weather);
+            onForecastSynced?.();
           }}
           disabled={refreshing}
         >

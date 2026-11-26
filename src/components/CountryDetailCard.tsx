@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Crosshair, Droplets, Loader2, Wind, X } from 'lucide-react';
+import { Crosshair, Droplets, Loader2, Star, Wind, X } from 'lucide-react';
 import {
   computeLocalTimeFromUtcOffset,
   type CountryDetailData,
@@ -14,6 +14,8 @@ export interface CountryDetailCardProps {
   loading: boolean;
   onFocusCountry: () => void;
   onClose: () => void;
+  isFavorite?: boolean;
+  onToggleFavorite?: () => void;
 }
 
 interface StatItem {
@@ -28,6 +30,8 @@ export function CountryDetailCard({
   loading,
   onFocusCountry,
   onClose,
+  isFavorite,
+  onToggleFavorite,
 }: CountryDetailCardProps) {
   const utcOffsetLabel = detail?.utcOffsetLabel ?? null;
   const [liveLocalTime, setLiveLocalTime] = useState<string | null>(() =>
@@ -120,14 +124,27 @@ export function CountryDetailCard({
             {subtitle ? <div className="country-subtitle">{subtitle}</div> : null}
           </div>
         </div>
-        <button
-          type="button"
-          className="icon-btn-inline"
-          onClick={onClose}
-          aria-label="Kapat"
-        >
-          <X size={15} />
-        </button>
+        <div className="card-header-actions">
+          {onToggleFavorite && (
+            <button
+              type="button"
+              className={`icon-btn-inline favorite-star-btn ${isFavorite ? 'is-fav' : ''}`}
+              onClick={onToggleFavorite}
+              title={isFavorite ? 'Favorilerden çıkar' : 'Favorilere ekle'}
+              aria-label={isFavorite ? 'Favorilerden çıkar' : 'Favorilere ekle'}
+            >
+              <Star size={15} fill={isFavorite ? '#fbbf24' : 'none'} />
+            </button>
+          )}
+          <button
+            type="button"
+            className="icon-btn-inline"
+            onClick={onClose}
+            aria-label="Kapat"
+          >
+            <X size={15} />
+          </button>
+        </div>
       </div>
 
       {loading ? (

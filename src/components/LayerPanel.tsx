@@ -16,6 +16,7 @@ import {
   Waves,
 } from 'lucide-react';
 import { BASE_LAYERS } from '../config/layers';
+import type { CacheBreakdown } from '../services/cacheStats';
 import type { BaseLayerId } from '../types/map';
 
 interface LayerPanelProps {
@@ -27,7 +28,7 @@ interface LayerPanelProps {
   solarEnabled: boolean;
   weatherEnabled: boolean;
   weatherBadgeOpacity: number;
-  weatherCacheCount: number;
+  cacheStats: CacheBreakdown;
   peaksEnabled: boolean;
   seasEnabled: boolean;
   rainEnabled: boolean;
@@ -64,7 +65,7 @@ export function LayerPanel({
   solarEnabled,
   weatherEnabled,
   weatherBadgeOpacity,
-  weatherCacheCount,
+  cacheStats,
   peaksEnabled,
   seasEnabled,
   rainEnabled,
@@ -92,6 +93,12 @@ export function LayerPanel({
   onToggleCountryMode,
 }: LayerPanelProps) {
   const [expanded, setExpanded] = useState(true);
+
+  const breakdownParts: string[] = [];
+  if (cacheStats.weather > 0) breakdownParts.push(`Hava: ${cacheStats.weather}`);
+  if (cacheStats.marine > 0) breakdownParts.push(`Deniz: ${cacheStats.marine}`);
+  if (cacheStats.country > 0) breakdownParts.push(`Ülke: ${cacheStats.country}`);
+  if (cacheStats.forecast > 0) breakdownParts.push(`Tahmin: ${cacheStats.forecast}`);
 
   return (
     <div className="layer-panel-dock">
@@ -329,7 +336,7 @@ export function LayerPanel({
                 <div>
                   <div className="toggle-label-title">Şehir Hava Durumu</div>
                   <div className="toggle-label-sub">
-                    {weatherCacheCount} şehir bellekte · 15 dk TTL
+                    {cacheStats.weather} şehir/dağ bellekte · 15 dk TTL
                   </div>
                 </div>
               </div>
@@ -365,15 +372,22 @@ export function LayerPanel({
               </div>
             )}
 
-            {weatherCacheCount > 0 && (
-              <button
-                type="button"
-                className="btn-subtle"
-                onClick={onClearWeatherCache}
-              >
-                <Trash2 size={13} />
-                <span>Önbelleği Temizle ({weatherCacheCount})</span>
-              </button>
+            {cacheStats.total > 0 && (
+              <div className="cache-clear-wrap">
+                <button
+                  type="button"
+                  className="btn-subtle"
+                  onClick={onClearWeatherCache}
+                >
+                  <Trash2 size={13} />
+                  <span>Önbelleği Temizle ({cacheStats.total})</span>
+                </button>
+                {breakdownParts.length > 0 && (
+                  <div className="cache-breakdown-sub">
+                    {breakdownParts.join(' · ')}
+                  </div>
+                )}
+              </div>
             )}
 
             <div className="toggle-row" style={{ marginTop: 4 }}>
