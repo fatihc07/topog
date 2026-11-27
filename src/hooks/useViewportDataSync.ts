@@ -26,6 +26,12 @@ import {
   type SeaDisplayItem,
 } from '../services/seaIndex';
 import {
+  fetchSeasonalAnomalies,
+  fetchViewportAnomalyGrid,
+  type AnomalyGridResult,
+  type SeasonalAnomalyData,
+} from '../services/seasonalAnomalyService';
+import {
   fetchWeatherForCities,
   resolveLocalCityAtCenter,
 } from '../services/weatherService';
@@ -41,6 +47,7 @@ export interface UseViewportDataSyncOptions {
   weatherEnabled: boolean;
   peaksEnabled: boolean;
   seasEnabled: boolean;
+  anomalyEnabled: boolean;
   onCacheUpdated: () => void;
   onWeatherCleared?: () => void;
   onPeaksCleared?: () => void;
@@ -56,6 +63,9 @@ export interface UseViewportDataSyncResult {
   setPeakItems: Dispatch<SetStateAction<PeakDisplayItem[]>>;
   seaItems: SeaDisplayItem[];
   setSeaItems: Dispatch<SetStateAction<SeaDisplayItem[]>>;
+  anomalyGrid: AnomalyGridResult | null;
+  anomalyLoading: boolean;
+  cityAnomalies: Record<string, SeasonalAnomalyData>;
   weatherSummary: WeatherSyncSummary;
   syncWeatherForBounds: (
     bounds: ViewportBounds,
@@ -74,6 +84,7 @@ export interface UseViewportDataSyncResult {
 }
 
 const VIEWPORT_SYNC_DEBOUNCE_MS = 250;
+const ANOMALY_SYNC_DEBOUNCE_MS = 450;
 
 function isAbortError(err: unknown): boolean {
   return (
@@ -92,6 +103,7 @@ export function useViewportDataSync(
     weatherEnabled,
     peaksEnabled,
     seasEnabled,
+    anomalyEnabled,
     onCacheUpdated,
     onWeatherCleared,
     onPeaksCleared,
@@ -101,7 +113,10 @@ export function useViewportDataSync(
   const weatherAbortRef = useRef<AbortController | null>(null);
   const peaksAbortRef = useRef<AbortController | null>(null);
   const seasAbortRef = useRef<AbortController | null>(null);
+  const anomalyGridAbortRef = useRef<AbortController | null>(null);
+  const anomalyCityAbortRef = useRef<AbortController | null>(null);
   const debounceTimerRef = useRef<number | null>(null);
+  const anomalyDebounceRef = useRef<number | null>(null);
   const lastBoundsRef = useRef<ViewportBounds | null>(null);
 
   const onCacheUpdatedRef = useRef(onCacheUpdated);
@@ -111,6 +126,7 @@ export function useViewportDataSync(
   const weatherEnabledRef = useRef(weatherEnabled);
   const peaksEnabledRef = useRef(peaksEnabled);
   const seasEnabledRef = useRef(seasEnabled);
+  const anomalyEnabledRef = useRef(anomalyEnabled);
 
   onCacheUpdatedRef.current = onCacheUpdated;
   onWeatherClearedRef.current = onWeatherCleared;
@@ -119,13 +135,23 @@ export function useViewportDataSync(
   weatherEnabledRef.current = weatherEnabled;
   peaksEnabledRef.current = peaksEnabled;
   seasEnabledRef.current = seasEnabled;
+  anomalyEnabledRef.current = anomalyEnabled;
 
   const [viewportBounds, setViewportBounds] = useState<ViewportBounds | null>(
     null
   );
   const [weatherItems, setWeatherItems] = useState<WeatherData[]>([]);
+  const weatherItemsRef = useRef<WeatherData[]>([]);
+  weatherItemsRef.current = weatherItems;
   const [peakItems, setPeakItems] = useState<PeakDisplayItem[]>([]);
   const [seaItems, setSeaItems] = useState<SeaDisplayItem[]>([]);
+  const [anomalyGrid, setAnomalyGrid] = useState<AnomalyGridResult | null>(null);
+  const [anomalyLoading, setAnomalyLoading] = useState(false);
+  const [cityAnomalies, setCityAnomalies] = useState<
+    Record<string, SeasonalAnomalyData>
+  >({});
+  const cityAnomaliesRef = useRef<Record<string, SeasonalAnomalyData>>({});
+  cityAnomaliesRef.current = cityAnomalies;
   const [weatherSummary, setWeatherSummary] = useState<WeatherSyncSummary>({
     visibleCount: 0,
     fromCacheCount: 0,
@@ -293,6 +319,48 @@ export function useViewportDataSync(
     []
   );
 
+  const syncAnomalyGridForBounds = useCallback(
+    async (bounds: ViewportBounds, enabled: boolean) => {
+      anomalyGridAbortRef.current?.abort();
+
+      if (!enabled) {
+        setAnomalyGrid(null);
+        setAnomalyLoading(false);
+        return;
+      }
+
+      const controller = new AbortController();
+      anomalyGridAbortRef.current = controller;
+      setAnomalyLoading(true);
+
+      try {
+        const extra = weatherItemsRef.current.map((w) => ({
+          id: w.cityId,
+          lat: w.lat,
+          lng: w.lng,
+        }));
+        const grid = await fetchViewportAnomalyGrid(
+          bounds,
+          controller.signal,
+          extra
+        );
+        if (controller.signal.aborted) return;
+        setAnomalyGrid(grid);
+        if (grid && Object.keys(grid.extraAnomalies).length > 0) {
+          setCityAnomalies((prev) => ({ ...prev, ...grid.extraAnomalies }));
+        }
+        onCacheUpdatedRef.current();
+      } catch (err) {
+        if (isAbortError(err)) return;
+      } finally {
+        if (!controller.signal.aborted) {
+          setAnomalyLoading(false);
+        }
+      }
+    },
+    []
+  );
+
   const handleViewportChange = useCallback(
     (bounds: ViewportBounds) => {
       lastBoundsRef.current = bounds;
@@ -307,8 +375,23 @@ export function useViewportDataSync(
         void syncPeaksForBounds(bounds, peaksEnabledRef.current);
         void syncSeasForBounds(bounds, seasEnabledRef.current);
       }, VIEWPORT_SYNC_DEBOUNCE_MS);
+
+      if (anomalyDebounceRef.current !== null) {
+        window.clearTimeout(anomalyDebounceRef.current);
+      }
+      if (anomalyEnabledRef.current) {
+        anomalyDebounceRef.current = window.setTimeout(() => {
+          anomalyDebounceRef.current = null;
+          void syncAnomalyGridForBounds(bounds, anomalyEnabledRef.current);
+        }, ANOMALY_SYNC_DEBOUNCE_MS);
+      }
     },
-    [syncWeatherForBounds, syncPeaksForBounds, syncSeasForBounds]
+    [
+      syncWeatherForBounds,
+      syncPeaksForBounds,
+      syncSeasForBounds,
+      syncAnomalyGridForBounds,
+    ]
   );
 
   const resyncAllActive = useCallback(() => {
@@ -324,7 +407,70 @@ export function useViewportDataSync(
     if (seasEnabledRef.current) {
       void syncSeasForBounds(bounds, true);
     }
-  }, [syncWeatherForBounds, syncPeaksForBounds, syncSeasForBounds]);
+    if (anomalyEnabledRef.current) {
+      void syncAnomalyGridForBounds(bounds, true);
+    }
+  }, [
+    syncWeatherForBounds,
+    syncPeaksForBounds,
+    syncSeasForBounds,
+    syncAnomalyGridForBounds,
+  ]);
+
+  useEffect(() => {
+    if (!anomalyEnabled) {
+      if (anomalyDebounceRef.current !== null) {
+        window.clearTimeout(anomalyDebounceRef.current);
+        anomalyDebounceRef.current = null;
+      }
+      anomalyGridAbortRef.current?.abort();
+      anomalyCityAbortRef.current?.abort();
+      setAnomalyGrid(null);
+      setAnomalyLoading(false);
+      return;
+    }
+    if (lastBoundsRef.current) {
+      void syncAnomalyGridForBounds(lastBoundsRef.current, true);
+    }
+  }, [anomalyEnabled, syncAnomalyGridForBounds]);
+
+  useEffect(() => {
+    anomalyCityAbortRef.current?.abort();
+    if (!anomalyEnabled || anomalyLoading || weatherItems.length === 0) {
+      return;
+    }
+
+    const missingCities = weatherItems.filter(
+      (w) => !cityAnomaliesRef.current[w.cityId]
+    );
+    if (missingCities.length === 0) {
+      return;
+    }
+
+    const controller = new AbortController();
+    anomalyCityAbortRef.current = controller;
+
+    fetchSeasonalAnomalies(
+      missingCities.map((w) => ({ id: w.cityId, lat: w.lat, lng: w.lng })),
+      { signal: controller.signal }
+    )
+      .then((res) => {
+        if (controller.signal.aborted) return;
+        const next: Record<string, SeasonalAnomalyData> = {};
+        for (const [id, data] of res.map.entries()) {
+          next[id] = data;
+        }
+        setCityAnomalies((prev) => ({ ...prev, ...next }));
+        onCacheUpdatedRef.current();
+      })
+      .catch((err) => {
+        if (isAbortError(err)) return;
+      });
+
+    return () => {
+      controller.abort();
+    };
+  }, [anomalyEnabled, anomalyLoading, weatherItems]);
 
   useEffect(() => {
     if (!weatherEnabled) {
@@ -374,9 +520,15 @@ export function useViewportDataSync(
         window.clearTimeout(debounceTimerRef.current);
         debounceTimerRef.current = null;
       }
+      if (anomalyDebounceRef.current !== null) {
+        window.clearTimeout(anomalyDebounceRef.current);
+        anomalyDebounceRef.current = null;
+      }
       weatherAbortRef.current?.abort();
       peaksAbortRef.current?.abort();
       seasAbortRef.current?.abort();
+      anomalyGridAbortRef.current?.abort();
+      anomalyCityAbortRef.current?.abort();
     };
   }, []);
 
@@ -389,6 +541,9 @@ export function useViewportDataSync(
     setPeakItems,
     seaItems,
     setSeaItems,
+    anomalyGrid,
+    anomalyLoading,
+    cityAnomalies,
     weatherSummary,
     syncWeatherForBounds,
     syncPeaksForBounds,

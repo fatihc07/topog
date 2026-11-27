@@ -12,6 +12,7 @@ import {
   Mountain,
   Sun,
   Sunset,
+  Thermometer,
   Trash2,
   Waves,
 } from 'lucide-react';
@@ -38,6 +39,9 @@ interface LayerPanelProps {
   cloudsOpacity: number;
   countryMode: boolean;
   countryLoading: boolean;
+  anomalyEnabled: boolean;
+  anomalyOpacity: number;
+  anomalyLoading: boolean;
   onSelectLayer: (id: BaseLayerId) => void;
   onToggleTerrain3D: () => void;
   onChangeExaggeration: (value: number) => void;
@@ -54,6 +58,8 @@ interface LayerPanelProps {
   onToggleClouds: () => void;
   onChangeCloudsOpacity: (value: number) => void;
   onToggleCountryMode: () => void;
+  onToggleAnomaly: () => void;
+  onChangeAnomalyOpacity: (value: number) => void;
 }
 
 export function LayerPanel({
@@ -75,6 +81,9 @@ export function LayerPanel({
   cloudsOpacity,
   countryMode,
   countryLoading,
+  anomalyEnabled,
+  anomalyOpacity,
+  anomalyLoading,
   onSelectLayer,
   onToggleTerrain3D,
   onChangeExaggeration,
@@ -91,6 +100,8 @@ export function LayerPanel({
   onToggleClouds,
   onChangeCloudsOpacity,
   onToggleCountryMode,
+  onToggleAnomaly,
+  onChangeAnomalyOpacity,
 }: LayerPanelProps) {
   const [expanded, setExpanded] = useState(true);
 
@@ -99,6 +110,7 @@ export function LayerPanel({
   if (cacheStats.marine > 0) breakdownParts.push(`Deniz: ${cacheStats.marine}`);
   if (cacheStats.country > 0) breakdownParts.push(`Ülke: ${cacheStats.country}`);
   if (cacheStats.forecast > 0) breakdownParts.push(`Tahmin: ${cacheStats.forecast}`);
+  if (cacheStats.anomaly > 0) breakdownParts.push(`Anomali: ${cacheStats.anomaly}`);
 
   return (
     <div className="layer-panel-dock">
@@ -410,6 +422,52 @@ export function LayerPanel({
                 <span className="switch-thumb" />
               </button>
             </div>
+
+            <div className="toggle-row" style={{ marginTop: 4 }}>
+              <div className="toggle-label-group">
+                <Thermometer size={16} color="#f59e0b" />
+                <div>
+                  <div className="toggle-label-title">
+                    Mevsim Normalleri (Anomali)
+                  </div>
+                  <div className="toggle-label-sub">
+                    {anomalyLoading
+                      ? 'ERA5 verileri hesaplanıyor...'
+                      : 'Mevsim normaline göre sıcaklık farkı · 15 dk TTL'}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={anomalyEnabled}
+                className={`switch-btn ${anomalyEnabled ? 'on' : ''}`}
+                onClick={onToggleAnomaly}
+              >
+                <span className="switch-thumb" />
+              </button>
+            </div>
+
+            {anomalyEnabled && (
+              <div className="slider-group">
+                <div className="slider-header">
+                  <span>Anomali Şeffaflığı</span>
+                  <strong>%{Math.round(anomalyOpacity * 100)}</strong>
+                </div>
+                <input
+                  type="range"
+                  min={0.2}
+                  max={0.95}
+                  step={0.05}
+                  value={anomalyOpacity}
+                  onChange={(e) =>
+                    onChangeAnomalyOpacity(parseFloat(e.target.value))
+                  }
+                  className="range-input"
+                  aria-label="Mevsim Normalleri Şeffaflığı"
+                />
+              </div>
+            )}
 
             <div className="toggle-row" style={{ marginTop: 4 }}>
               <div className="toggle-label-group">

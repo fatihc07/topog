@@ -5,12 +5,17 @@ import {
   getCountryDetailCacheCount,
 } from './countryDetailService';
 import { clearForecastCache, getForecastCacheCount } from './forecastService';
+import {
+  clearAnomalyCache,
+  getAnomalyCacheCount,
+} from './seasonalAnomalyService';
 
 export interface CacheBreakdown {
   weather: number;
   marine: number;
   country: number;
   forecast: number;
+  anomaly: number;
   total: number;
 }
 
@@ -19,13 +24,15 @@ export function getAllCacheStats(): CacheBreakdown {
   const marine = getMarineCacheCount();
   const country = getCountryDetailCacheCount();
   const forecast = getForecastCacheCount();
+  const anomaly = getAnomalyCacheCount();
 
   return {
     weather,
     marine,
     country,
     forecast,
-    total: weather + marine + country + forecast,
+    anomaly,
+    total: weather + marine + country + forecast + anomaly,
   };
 }
 
@@ -34,4 +41,5 @@ export function clearAllAppCaches(): void {
   clearMarineCache();
   clearCountryDetailCache();
   clearForecastCache();
+  clearAnomalyCache();
 }

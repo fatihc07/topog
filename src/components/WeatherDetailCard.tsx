@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeftRight, RefreshCw, Star, X } from 'lucide-react';
+import {
+  getAnomalyBadgePalette,
+  type SeasonalAnomalyData,
+} from '../services/seasonalAnomalyService';
 import { WEATHER_CACHE_TTL_MS } from '../services/weatherCache';
 import { getWeatherMeta } from '../services/weatherService';
 import type { WeatherData } from '../types/weather';
@@ -8,6 +12,7 @@ import { WeatherIcon } from './WeatherIcon';
 
 interface WeatherDetailCardProps {
   weather: WeatherData;
+  anomaly?: SeasonalAnomalyData | null;
   elevationMeters?: number;
   refreshing: boolean;
   onRefresh: (weather: WeatherData) => void;
@@ -21,6 +26,7 @@ interface WeatherDetailCardProps {
 
 export function WeatherDetailCard({
   weather,
+  anomaly,
   elevationMeters,
   refreshing,
   onRefresh,
@@ -146,6 +152,32 @@ export function WeatherDetailCard({
             </div>
           </div>
         )}
+        {anomaly && (() => {
+          const palette = getAnomalyBadgePalette(anomaly.anomaly);
+          const sign = anomaly.anomaly > 0 ? '+' : '';
+          return (
+            <div className="inspect-stat anomaly-stat-card" style={{ gridColumn: '1 / -1' }}>
+              <div className="anomaly-stat-top">
+                <div className="inspect-stat-label">Mevsim Normaline Göre</div>
+                <span
+                  className="anomaly-stat-pill"
+                  style={{
+                    background: palette.bg,
+                    borderColor: palette.border,
+                    color: palette.text,
+                  }}
+                >
+                  {sign}
+                  {anomaly.anomaly.toFixed(1)}°C · {palette.label}
+                </span>
+              </div>
+              <div className="anomaly-stat-sub">
+                Bugün Ort: {anomaly.todayMean.toFixed(1)}°C · 1996–2020 Normali:{' '}
+                {anomaly.seasonalNormal.toFixed(1)}°C
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       <ForecastSection

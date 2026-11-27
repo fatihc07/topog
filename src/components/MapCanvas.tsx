@@ -16,6 +16,11 @@ import {
   type CountryHoverInfo,
 } from '../services/countryService';
 import type { SeaDisplayItem } from '../services/seaIndex';
+import {
+  getAnomalyBadgePalette,
+  type AnomalyGridResult,
+  type SeasonalAnomalyData,
+} from '../services/seasonalAnomalyService';
 import { buildNightPolygonGeoJson } from '../services/solarService';
 import { getWeatherMeta } from '../services/weatherService';
 import type { BaseLayerId, FlyTarget, TelemetryState } from '../types/map';
@@ -167,6 +172,10 @@ interface MapCanvasProps {
   onSelectSea: (item: SeaDisplayItem) => void;
   countryMode: boolean;
   selectedCountryId: number | null;
+  anomalyEnabled: boolean;
+  anomalyOpacity: number;
+  anomalyGrid: AnomalyGridResult | null;
+  cityAnomalies: Record<string, SeasonalAnomalyData>;
   onSelectCountry: (
     info: CountryHoverInfo,
     bbox: [number, number, number, number] | null
@@ -209,6 +218,10 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
       onSelectSea,
       countryMode,
       selectedCountryId,
+      anomalyEnabled,
+      anomalyOpacity,
+      anomalyGrid,
+      cityAnomalies,
       onSelectCountry,
       onCountryLoadingChange,
     },
@@ -820,6 +833,74 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
       }
     }, [rainEnabled, rainOpacity, radarFrames, activeRadarIndex]);
 
+    // Sync Seasonal Temperature Anomaly raster image overlay without calling setStyle()
+    useEffect(() => {
+      const map = mapRef.current;
+      if (!map || !isLoadedRef.current) return;
+
+      const sourceId = 'anomaly-overlay-source';
+      const layerId = 'anomaly-overlay';
+
+      if (!anomalyEnabled || !anomalyGrid) {
+        if (map.getLayer(layerId)) {
+          map.setLayoutProperty(layerId, 'visibility', 'none');
+        }
+        return;
+      }
+
+      const [west, south, east, north] = anomalyGrid.bounds;
+      const coordinates: [
+        [number, number],
+        [number, number],
+        [number, number],
+        [number, number],
+      ] = [
+        [west, north],
+        [east, north],
+        [east, south],
+        [west, south],
+      ];
+
+      const existingSource = map.getSource(sourceId) as
+        | maplibregl.ImageSource
+        | undefined;
+      if (!existingSource) {
+        map.addSource(sourceId, {
+          type: 'image',
+          url: anomalyGrid.imageUrl,
+          coordinates,
+        });
+      } else {
+        existingSource.updateImage({
+          url: anomalyGrid.imageUrl,
+          coordinates,
+        });
+      }
+
+      if (!map.getLayer(layerId)) {
+        const beforeLayer = map.getLayer('solar-night-fill')
+          ? 'solar-night-fill'
+          : undefined;
+        map.addLayer(
+          {
+            id: layerId,
+            type: 'raster',
+            source: sourceId,
+            layout: { visibility: 'visible' },
+            paint: {
+              'raster-opacity': anomalyOpacity,
+              'raster-fade-duration': 250,
+              'raster-resampling': 'linear',
+            },
+          },
+          beforeLayer
+        );
+      } else {
+        map.setLayoutProperty(layerId, 'visibility', 'visible');
+        map.setPaintProperty(layerId, 'raster-opacity', anomalyOpacity);
+      }
+    }, [anomalyEnabled, anomalyOpacity, anomalyGrid, mapInstance]);
+
     // Handle flyTo requests
     useEffect(() => {
       const map = mapRef.current;
@@ -883,18 +964,26 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
       for (const item of weatherItems) {
         const meta = getWeatherMeta(item.weatherCode, item.isDay);
         const isSelected = item.cityId === selectedWeatherCityId;
+        const anomalyItem = anomalyEnabled ? cityAnomalies[item.cityId] : undefined;
         const existing = markers.get(item.cityId);
 
         const buildBadgeContent = (btn: HTMLButtonElement) => {
-          btn.className = `weather-badge${isSelected ? ' selected' : ''}`;
+          btn.className = `weather-badge${isSelected ? ' selected' : ''}${
+            anomalyItem ? ' is-anomaly' : ''
+          }`;
           const sourceLabel = item.source === 'cache' ? 'Bellekten' : 'Canlı';
           const feelsLike = Number.isFinite(item.apparentTemperature)
             ? Math.round(item.apparentTemperature)
             : null;
+          const anomalySign =
+            anomalyItem && anomalyItem.anomaly > 0 ? '+' : '';
+          const anomalyTip = anomalyItem
+            ? ` · Normal: ${anomalyItem.seasonalNormal.toFixed(1)}°C (${anomalySign}${anomalyItem.anomaly.toFixed(1)}°C)`
+            : '';
           btn.title =
             feelsLike !== null
-              ? `${item.cityName}: ${Math.round(item.temperature)}°C · Hissedilen: ${feelsLike}°C · ${meta.label} (${sourceLabel})`
-              : `${item.cityName}: ${Math.round(item.temperature)}°C · ${meta.label} (${sourceLabel})`;
+              ? `${item.cityName}: ${Math.round(item.temperature)}°C · Hissedilen: ${feelsLike}°C · ${meta.label}${anomalyTip} (${sourceLabel})`
+              : `${item.cityName}: ${Math.round(item.temperature)}°C · ${meta.label}${anomalyTip} (${sourceLabel})`;
           btn.innerHTML = '';
 
           const iconSpan = document.createElement('span');
@@ -914,7 +1003,19 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
           tempSpan.textContent = `${Math.round(item.temperature)}°`;
 
           btn.append(iconSpan, nameSpan, tempSpan);
-          if (feelsLike !== null) {
+          if (anomalyItem) {
+            const palette = getAnomalyBadgePalette(anomalyItem.anomaly);
+            const roundedDelta = Math.round(anomalyItem.anomaly);
+            const deltaText = `${roundedDelta > 0 ? '+' : ''}${roundedDelta}°`;
+            const anomalySpan = document.createElement('span');
+            anomalySpan.className = 'weather-badge-anomaly-pill';
+            anomalySpan.style.background = palette.bg;
+            anomalySpan.style.borderColor = palette.border;
+            anomalySpan.style.color = palette.text;
+            anomalySpan.textContent = deltaText;
+            anomalySpan.title = `Mevsim normali (${anomalyItem.seasonalNormal.toFixed(1)}°C): ${anomalySign}${anomalyItem.anomaly.toFixed(1)}°C`;
+            btn.append(anomalySpan);
+          } else if (feelsLike !== null) {
             const feelsSpan = document.createElement('span');
             feelsSpan.className = 'weather-badge-feels';
             feelsSpan.textContent = `H ${feelsLike}°`;
@@ -958,7 +1059,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(
           markers.set(item.cityId, marker);
         }
       }
-    }, [weatherItems, selectedWeatherCityId]);
+    }, [weatherItems, selectedWeatherCityId, anomalyEnabled, cityAnomalies]);
 
     // Reconcile mountain peak markers (name + elevation + real summit temp if available)
     useEffect(() => {

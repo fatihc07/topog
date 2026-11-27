@@ -1,6 +1,6 @@
 # Topog — Dünya Fiziksel Haritası & Canlı Atmosfer Atlası
 
-**Aktif Sürüm:** `T 7.0` · **Sürüm Geçmişi:** [CHANGELOG.md](./CHANGELOG.md)
+**Aktif Sürüm:** `T 7.1` · **Sürüm Geçmişi:** [CHANGELOG.md](./CHANGELOG.md)
 
 Topog; tamamen ücretsiz, API anahtarı gerektirmeyen açık coğrafi ve meteorolojik veri kaynaklarıyla çalışan etkileşimli 2B/3B dünya fiziksel harita, canlı hava durumu, yağmur radarı ve uydu bulut örtüsü uygulamasıdır.
 
@@ -36,6 +36,7 @@ Topog; tamamen ücretsiz, API anahtarı gerektirmeyen açık coğrafi ve meteoro
 - **Yan Yana Karşılaştırma Modu:** Herhangi bir şehir veya dağ kartından **Karşılaştır** ile ikinci bir şehir veya dağ seçilerek sıcaklık, hissedilen, nem, rüzgar, basınç, rakım ve kar kalınlığı fark rozetleriyle kıyaslanır.
 
 ### Atmosfer Katmanları
+- **Mevsim Normalleri & Sıcaklık Anomalisi (`T 7.1`):** Open-Meteo Forecast + Open-Meteo ERA5 Historical Archive (`1996–2020`, `±5` günlük pencere) verileriyle gerçek mevsim normaline göre sıcaklık farkı (`-8°C` mavi → `0°C` yeşil → `+8°C` kırmızı) harita katmanı, şehir anomali rozetleri ve 15 dk önbellekli skala.
 - **Güneş & Gece Sınırı (Terminator):** Dünya üzerindeki anlık gece-gündüz sınırı, 24 saatlik oynatılabilir zaman çizelgesi, `Gündüz / Altın Saat / Gece` fazı ve güneş azimutuna göre dinamik 3D dağ gölge yönü.
 - **Yağmur Radarı (RainViewer):** Canlı yağış radarı, `%20 – %100` şeffaflık ayarı ve son 2 saat için **Oynat / Duraklat** animasyon çubuğu.
 - **Canlı Bulut Örtüsü (Uydu IR):** SSEC RealEarth küresel jeostasyoner uydu IR bulut katmanı (`z8`'e kadar yüksek çözünürlük, özel `cloud-ir://` şeffaf bulut protokolü) ve `%20 – %100` şeffaflık ayarı.
@@ -47,7 +48,7 @@ Topog; tamamen ücretsiz, API anahtarı gerektirmeyen açık coğrafi ve meteoro
 - **Termodinamik Kar Birikme, Erime & Yağmur Fiziği:** Sıcaklık (`-20°C..+25°C`), yağış modu (`Açık`, `Yağmur`, `Kar`, `Otomatik`), şiddet, rüzgar, saat kontrolleri ve 4 hazır senaryo (*Güneşli Orman, Orman Yağmuru, Kar Fırtınası, Bahar Erimesi*) ile soğukta `0..80 cm` kar birikimi, `0°C` üstünde güneş ve yağmurla erime.
 
 ### Sürüm Takibi
-- Uygulama içi sol üstteki **`T 7.0`** rozetine tıklayarak tüm sürüm notlarını (*Eklenenler / Yapılanlar / Çıkarılanlar*) görüntüleyebilirsiniz.
+- Uygulama içi sol üstteki **`T 7.1`** rozetine tıklayarak tüm sürüm notlarını (*Eklenenler / Yapılanlar / Çıkarılanlar*) görüntüleyebilirsiniz.
 - Proje kuralları ve uzman alt ajan rehberi [`AGENTS.md`](./AGENTS.md) ve [`.agents/agents/`](./.agents/agents/) içinde tutulur.
 
 ---

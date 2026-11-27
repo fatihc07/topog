@@ -7,6 +7,22 @@ Sürüm numaralandırma kuralı: **`T <Büyük>.<Küçük>`**
 
 ---
 
+## [T 7.1] — 2026-11-27
+**Canlı Atlas — Mevsim Normallerine Göre Gerçek Sıcaklık Anomalisi Haritası**
+
+### Eklenenler
+- **Gerçek 25 Yıllık Mevsim Normali Servisi** (`src/services/seasonalAnomalyService.ts`): Open-Meteo Forecast (`temperature_2m_mean`) ile Open-Meteo ERA5 Historical Archive (`1996–2020`, günün `±5` günlük penceresinden `44` gerçek günlük ölçüm) verilerini birleştirerek 15 dakika TTL (RAM + `localStorage`) önbellekli gerçek sıcaklık anomalisi hesaplaması.
+- **Sürekli Renk Bantlı Anomali Haritası & Şehir Fark Rozetleri** (`src/components/MapCanvas.tsx`, `src/hooks/useViewportDataSync.ts`, `src/components/WeatherDetailCard.tsx`): Görünüm alanındaki `7×5` gerçek örneklemden `2°C` izoterm bantlı Mavi (`-8°C`) → Yeşil (`0° Normal`) → Sarı (`+2°C`) → Kırmızı (`+8°C`) harita katmanı, şehir rozetlerinde anlık anomali hapları ve detay kartında normal kıyaslama kutusu.
+- **Katman Anahtarı, Şeffaflık & Skala** (`src/components/LayerPanel.tsx`, `src/components/AnomalyLegend.tsx`, `src/services/cacheStats.ts`): `Mevsim Normalleri (Anomali)` katman anahtarı, `%20–%95` şeffaflık kaydırıcısı ve alt skala çubuğu.
+
+### Yapılanlar / İyileştirmeler
+- Uydurma veri üretilmez; Open-Meteo verisi eksik olan koordinatlar dışarıda bırakılır.
+
+### Çıkarılanlar
+- Bu sürümde kaldırılan bir özellik yoktur.
+
+---
+
 ## [T 7.0] — 2026-11-26
 **Canlı Dünya — Unreal Engine 5 Seviyesinde PBR Malzemeler, Gerçek Gölge Haritası & PMREM IBL**
 

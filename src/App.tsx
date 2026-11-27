@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AnomalyLegend } from './components/AnomalyLegend';
 import { AppModeTabs } from './components/AppModeTabs';
 import { CompareCard } from './components/CompareCard';
 import { CountryDetailCard } from './components/CountryDetailCard';
@@ -80,6 +81,9 @@ export default function App() {
   const [cloudsEnabled, setCloudsEnabled] = useState(false);
   const [cloudsOpacity, setCloudsOpacity] = useState(0.8);
 
+  const [anomalyEnabled, setAnomalyEnabled] = useState(false);
+  const [anomalyOpacity, setAnomalyOpacity] = useState(0.62);
+
   const [solarEnabled, setSolarEnabled] = useState(false);
   const [solarMinutes, setSolarMinutes] = useState(() => {
     const now = new Date();
@@ -137,6 +141,9 @@ export default function App() {
     peakItems,
     setPeakItems,
     seaItems,
+    anomalyGrid,
+    anomalyLoading,
+    cityAnomalies,
     weatherSummary,
     handleViewportChange,
     resyncAllActive,
@@ -144,6 +151,7 @@ export default function App() {
     weatherEnabled,
     peaksEnabled,
     seasEnabled,
+    anomalyEnabled,
     onCacheUpdated: refreshCacheStats,
     onWeatherCleared: () => setSelectedWeather(null),
     onPeaksCleared: () => setSelectedPeak(null),
@@ -660,6 +668,10 @@ export default function App() {
         onSelectSea={handleSelectSea}
         countryMode={countryMode}
         selectedCountryId={selectedCountry?.id ?? null}
+        anomalyEnabled={anomalyEnabled}
+        anomalyOpacity={anomalyOpacity}
+        anomalyGrid={anomalyGrid}
+        cityAnomalies={cityAnomalies}
         onSelectCountry={handleSelectCountry}
         onCountryLoadingChange={setCountryLoading}
       />
@@ -692,6 +704,9 @@ export default function App() {
         cloudsOpacity={cloudsOpacity}
         countryMode={countryMode}
         countryLoading={countryLoading}
+        anomalyEnabled={anomalyEnabled}
+        anomalyOpacity={anomalyOpacity}
+        anomalyLoading={anomalyLoading}
         onSelectLayer={setActiveLayer}
         onToggleTerrain3D={() => setTerrain3D((prev) => !prev)}
         onChangeExaggeration={setExaggeration}
@@ -708,6 +723,8 @@ export default function App() {
         onToggleClouds={() => setCloudsEnabled((prev) => !prev)}
         onChangeCloudsOpacity={setCloudsOpacity}
         onToggleCountryMode={() => setCountryMode((prev) => !prev)}
+        onToggleAnomaly={() => setAnomalyEnabled((prev) => !prev)}
+        onChangeAnomalyOpacity={setAnomalyOpacity}
       />
 
       <MapControls
@@ -731,8 +748,9 @@ export default function App() {
         }
       />
 
-      {(rainEnabled || solarEnabled) && (
+      {(rainEnabled || solarEnabled || anomalyEnabled) && (
         <div className="bottom-bars-stack">
+          {anomalyEnabled && <AnomalyLegend loading={anomalyLoading} />}
           {solarEnabled && (
             <SolarTimeline
               minutesOfDay={solarMinutes}
@@ -851,6 +869,7 @@ export default function App() {
       ) : selectedWeather ? (
         <WeatherDetailCard
           weather={selectedWeather}
+          anomaly={cityAnomalies[selectedWeather.cityId] ?? null}
           refreshing={refreshingCity}
           onRefresh={(w) => void handleRefreshCityWeather(w)}
           onStartCompare={() =>

@@ -7,9 +7,21 @@ export interface ReleaseEntry {
   removed: string[];
 }
 
-export const APP_VERSION = 'T 7.0';
+export const APP_VERSION = 'T 7.1';
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
+  {
+    version: 'T 7.1',
+    date: '2026-11-27',
+    title: 'Canlı Atlas — Mevsim Normallerine Göre Gerçek Sıcaklık Anomalisi Haritası',
+    added: [
+      'Gerçek 25 Yıllık Mevsim Normali Servisi (src/services/seasonalAnomalyService.ts): Open-Meteo Forecast (bugün günlük ortalama) ve Open-Meteo ERA5 Historical Archive (1996–2020 dönemi ±5 gün penceresinden 44 gerçek ölçüm örneği) üzerinden 15 dakika TTL (RAM + localStorage) önbellekli sıcaklık anomalisi hesaplaması eklendi.',
+      'Kırmızı-Sarı-Yeşil-Mavi İzoterm Harita Katmanı & Şehir Rozetleri (src/components/MapCanvas.tsx, src/hooks/useViewportDataSync.ts): Ekran görünümündeki 7×5 gerçek ızgaradan 2°C izoterm bantlı MapLibre image katmanı, şehir rozetlerinde renk kodlu anomali fark hapı (+2°, -6° vb.) ve WeatherDetailCard içinde Mevsim Normaline Göre kartı eklendi.',
+      'Mevsim Normalleri Katman Kontrolü & Skala Efsanesi (src/components/LayerPanel.tsx, AnomalyLegend.tsx, cacheStats.ts): Aç/kapa anahtarı, %20–%95 şeffaflık kaydırıcısı ve alt kısımda sürekli -8°C..+8°C renk ölçeği eklendi.',
+    ],
+    changed: [],
+    removed: [],
+  },
   {
     version: 'T 7.0',
     date: '2026-11-26',
