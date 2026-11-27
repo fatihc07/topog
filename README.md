@@ -1,6 +1,6 @@
 # Topog — Dünya Fiziksel Haritası & Canlı Atmosfer Atlası
 
-**Aktif Sürüm:** `T 6.2` · **Sürüm Geçmişi:** [CHANGELOG.md](./CHANGELOG.md)
+**Aktif Sürüm:** `T 7.0` · **Sürüm Geçmişi:** [CHANGELOG.md](./CHANGELOG.md)
 
 Topog; tamamen ücretsiz, API anahtarı gerektirmeyen açık coğrafi ve meteorolojik veri kaynaklarıyla çalışan etkileşimli 2B/3B dünya fiziksel harita, canlı hava durumu, yağmur radarı ve uydu bulut örtüsü uygulamasıdır.
 
@@ -42,12 +42,12 @@ Topog; tamamen ücretsiz, API anahtarı gerektirmeyen açık coğrafi ve meteoro
 
 ### Canlı Dünya Modu (Three.js 3B Orman & Atmosfer Fiziği)
 - **Üst Mod Sekmesi (`Canlı Atlas` | `Canlı Dünya`):** Harita görünümü ile etkileşimli 3B orman dünyası arasında tek tıkla geçiş (Three.js yalnızca `Canlı Dünya` seçildiğinde tembel yüklenir).
-- **Gerçekçi Dallanan Yapraklı Orman & Özel GLSL Shaderlar:** `260×260 m` engebeli orman arazisinde kıvrımlı sıcak toprak patika, `CatmullRomCurve3` eğimli/çatallı gövdelere sahip `1.900` yapraklı/yaşlı ağaç (`800` meşe/kayın, `650` akçaağaç/huş, `450` yaşlı gövde) ve alpha-cutout yaprak kümesi kartları, `26.000` çimen demeti, `4.200` adet 7 yapraklı eğrelti otu, `220` yüksek segmentli yosunlu kaya; `32` hacimsel sis düzlemi, `18` güneş hüzmesi, rüzgar dalgası, ıslanma parlaklığı, kar beyazlaşması, GPU hacimsel yağmur/kar parçacıkları ve akşam ateş böcekleri (`OrbitControls` + `WASD`/Yön tuşları).
+- **Gerçekçi Dallanan Yapraklı Orman & PBR (UE5 Seviyesi) Malzemeler:** `260×260 m` engebeli orman arazisinde kıvrımlı sıcak toprak patika, `CatmullRomCurve3` eğimli/çatallı gövdelere sahip `1.900` yapraklı/yaşlı ağaç (`800` meşe/kayın, `650` akçaağaç/gümüş huş, `450` yaşlı gövde), Sobel normal & pürüzlülük haritalı PBR `MeshStandardMaterial` shaderları, `2048×2048` `PCFSoftShadowMap` gerçek yaprak/dal gölgeleri, PMREM IBL yansımaları, `30.000` çimen demeti, `4.800` eğrelti otu, `180` yosunlu kaya; `32` hacimsel sis düzlemi, `18` güneş hüzmesi, rüzgar dalgası, ıslanma su birikintileri, kar beyazlaşması, GPU yağmur/kar parçacıkları ve akşam ateş böcekleri (`OrbitControls` + `WASD`/Yön tuşları).
 - **Dinamik Skybox, Çok Katmanlı Bulutlar & Zemin Gölgeleri:** Rayleigh/Mie gökyüzü, Ay ve yıldızlar, `180 m` kümülüs/fırtına + `420 m` sirüs bulut katmanları (*Kümülüs, Parçalı, Sirüs, Fırtına* + `%0–%100` bulutluluk), 4 adımlı yönlü güneş öz-gölgelemesi, Mie gümüş kenar parıltısı ve bulut güneşin önünden geçerken senkronize kararan/aydınlanan zemin gölgeleri (anlık güneş durumu HUD'ı).
 - **Termodinamik Kar Birikme, Erime & Yağmur Fiziği:** Sıcaklık (`-20°C..+25°C`), yağış modu (`Açık`, `Yağmur`, `Kar`, `Otomatik`), şiddet, rüzgar, saat kontrolleri ve 4 hazır senaryo (*Güneşli Orman, Orman Yağmuru, Kar Fırtınası, Bahar Erimesi*) ile soğukta `0..80 cm` kar birikimi, `0°C` üstünde güneş ve yağmurla erime.
 
 ### Sürüm Takibi
-- Uygulama içi sol üstteki **`T 6.2`** rozetine tıklayarak tüm sürüm notlarını (*Eklenenler / Yapılanlar / Çıkarılanlar*) görüntüleyebilirsiniz.
+- Uygulama içi sol üstteki **`T 7.0`** rozetine tıklayarak tüm sürüm notlarını (*Eklenenler / Yapılanlar / Çıkarılanlar*) görüntüleyebilirsiniz.
 - Proje kuralları ve uzman alt ajan rehberi [`AGENTS.md`](./AGENTS.md) ve [`.agents/agents/`](./.agents/agents/) içinde tutulur.
 
 ---

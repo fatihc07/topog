@@ -7,9 +7,23 @@ export interface ReleaseEntry {
   removed: string[];
 }
 
-export const APP_VERSION = 'T 6.2';
+export const APP_VERSION = 'T 7.0';
 
 export const RELEASE_NOTES: ReleaseEntry[] = [
+  {
+    version: 'T 7.0',
+    date: '2026-11-26',
+    title: 'Canlı Dünya — Unreal Engine 5 Seviyesinde PBR Malzemeler, Gerçek Gölge Haritası & PMREM IBL',
+    added: [
+      'PBR Normal & Pürüzlülük Doku Seti (src/services/forestTextures.ts): Sobel türevli teğet uzayı normal haritaları (oakBarkNormalMap, birchBarkNormalMap, groundNormalMap, rockNormalMap), pürüzlülük haritaları (oakBarkRoughnessMap, groundRoughnessMap) ve ayrı akçaağaç/huş kabuğu dokusu (birchBarkMap) eklendi.',
+      'PMREM Çevre Aydınlatması & 2048×2048 PCFSoftShadowMap Gölge Sistemi (src/services/forestSceneBuilder.ts): Tekzel kilitlemeli DirectionalLight gölge kamerası (texel snapping), yaprak başına alfa kesimli MeshDepthMaterial gölgelendirme (createCanopyDepthMaterial, createBarkDepthMaterial) ve prosedürel PMREM IBL yansımaları kuruldu.',
+      'Ön Plan Patika Kompozisyonu: Sağ patika kenarında gümüş huş (silver birch), sol tarafta yaşlı meşe/kayın ağaçları ve 30.000 çimen + 4.800 eğrelti rozeti ile gerçekçi derinlik oluşturuldu.',
+    ],
+    changed: [
+      'Tüm orman yüzey shaderları (zemin, meşe/huş kabuğu, taç yapraklar, çimen, eğrelti, yosunlu kaya) doğrusal renk uzayında çalışan PBR MeshStandardMaterial + onBeforeCompile mimarisine yükseltildi (src/services/forestShaders.ts); yağmurda ıslak zemin su birikintileri ve kar altında saten pürüzlülük değişimi eklendi.',
+    ],
+    removed: [],
+  },
   {
     version: 'T 6.2',
     date: '2026-11-26',

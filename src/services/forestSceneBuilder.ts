@@ -16,17 +16,19 @@ import {
   getTrailFactor,
 } from './forestWeatherPhysics';
 import {
-  createBarkMaterial,
-  createCanopyMaterial,
-  createFernMaterial,
+  createBarkDepthMaterial,
+  createCanopyDepthMaterial,
   createFireflyParticleMaterial,
-  createGrassMaterial,
+  createPbrBarkMaterial,
+  createPbrCanopyMaterial,
+  createPbrFernMaterial,
+  createPbrGrassMaterial,
+  createPbrRockMaterial,
+  createPbrTerrainMaterial,
   createRainParticleMaterial,
-  createRockMaterial,
   createSkyDomeMaterial,
   createSnowParticleMaterial,
   createSunbeamMaterial,
-  createTerrainMaterial,
   createVolumetricMistMaterial,
 } from './forestShaders';
 
@@ -44,8 +46,8 @@ const HALF_WORLD = WORLD_SIZE * 0.5;
 const OAK_COUNT = 800;
 const BIRCH_COUNT = 650;
 const OLD_GROWTH_COUNT = 450;
-const GRASS_COUNT = 26000;
-const FERN_COUNT = 4200;
+const GRASS_COUNT = 30000;
+const FERN_COUNT = 4800;
 const ROCK_COUNT = 180;
 const MIST_PLANE_COUNT = 32;
 const SUNBEAM_COUNT = 18;
@@ -804,12 +806,56 @@ export function createForestScene(container: HTMLElement): ForestSceneController
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.06;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.domElement.style.display = 'block';
   renderer.domElement.style.width = '100%';
   renderer.domElement.style.height = '100%';
   container.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
+  const sceneFog = new THREE.FogExp2(0xcdd6c5, 0.0112);
+  scene.fog = sceneFog;
+
+  // Procedural woodland PMREM IBL for physically realistic diffuse/specular sky & ground bounce
+  const pmremGenerator = new THREE.PMREMGenerator(renderer);
+  const envScene = new THREE.Scene();
+  const envSkyGeo = new THREE.SphereGeometry(24, 24, 16);
+  const envSkyMat = new THREE.MeshBasicMaterial({ color: 0xc2d0c4, side: THREE.BackSide });
+  const envSkyMesh = new THREE.Mesh(envSkyGeo, envSkyMat);
+  const envGroundGeo = new THREE.CircleGeometry(22, 24);
+  envGroundGeo.rotateX(-Math.PI / 2);
+  const envGroundMat = new THREE.MeshBasicMaterial({ color: 0x354229 });
+  const envGroundMesh = new THREE.Mesh(envGroundGeo, envGroundMat);
+  envGroundMesh.position.y = -2;
+  const envKeyLight = new THREE.DirectionalLight(0xfff1d6, 2.2);
+  envKeyLight.position.set(12, 18, -14);
+  const envHemi = new THREE.HemisphereLight(0xd2ddd2, 0x324026, 1.1);
+  envScene.add(envSkyMesh, envGroundMesh, envKeyLight, envHemi);
+  const envRT = pmremGenerator.fromScene(envScene, 0.04);
+  scene.environment = envRT.texture;
+  scene.environmentIntensity = 0.74;
+  envSkyGeo.dispose();
+  envSkyMat.dispose();
+  envGroundGeo.dispose();
+  envGroundMat.dispose();
+
+  const hemiLight = new THREE.HemisphereLight(0xcdd6c5, 0x26341d, 0.92);
+  scene.add(hemiLight);
+
+  const sunLight = new THREE.DirectionalLight(0xfff1d6, 3.0);
+  sunLight.castShadow = true;
+  sunLight.shadow.mapSize.set(2048, 2048);
+  sunLight.shadow.camera.left = -46;
+  sunLight.shadow.camera.right = 46;
+  sunLight.shadow.camera.top = 46;
+  sunLight.shadow.camera.bottom = -46;
+  sunLight.shadow.camera.near = 2;
+  sunLight.shadow.camera.far = 175;
+  sunLight.shadow.bias = -0.0005;
+  sunLight.shadow.normalBias = 0.045;
+  scene.add(sunLight);
+  scene.add(sunLight.target);
 
   const camera = new THREE.PerspectiveCamera(50, width / height, 0.2, 420);
   const orbit = new OrbitControls(camera, renderer.domElement);
@@ -831,20 +877,44 @@ export function createForestScene(container: HTMLElement): ForestSceneController
   };
   setInitialCamera();
 
-  // Procedural canvas textures & shared GLSL materials
+  // Procedural canvas textures & PBR / volumetric materials
   const textures = createForestTextures();
   const skyMat = createSkyDomeMaterial();
-  const terrainMat = createTerrainMaterial(textures.groundDetailMap);
-  const barkMat = createBarkMaterial(textures.barkMap);
-  const canopyMat = createCanopyMaterial(textures.leafClusterMap);
-  const grassMat = createGrassMaterial(textures.grassTuftMap);
-  const fernMat = createFernMaterial(textures.fernFrondMap);
-  const rockMat = createRockMaterial();
+  const terrainHandle = createPbrTerrainMaterial({
+    groundDetailMap: textures.groundDetailMap,
+    groundNormalMap: textures.groundNormalMap,
+    groundRoughnessMap: textures.groundRoughnessMap,
+  });
+  const oakBarkHandle = createPbrBarkMaterial({
+    map: textures.oakBarkMap,
+    normalMap: textures.oakBarkNormalMap,
+    roughnessMap: textures.oakBarkRoughnessMap,
+    isBirch: false,
+  });
+  const birchBarkHandle = createPbrBarkMaterial({
+    map: textures.birchBarkMap,
+    normalMap: textures.birchBarkNormalMap,
+    isBirch: true,
+  });
+  const barkDepthHandle = createBarkDepthMaterial();
+  const canopyHandle = createPbrCanopyMaterial(textures.leafClusterMap);
+  const canopyDepthHandle = createCanopyDepthMaterial(textures.leafClusterMap);
+  const grassHandle = createPbrGrassMaterial(textures.grassTuftMap);
+  const fernHandle = createPbrFernMaterial(textures.fernFrondMap);
+  const rockHandle = createPbrRockMaterial(textures.rockMap, textures.rockNormalMap);
   const mistMat = createVolumetricMistMaterial();
   const sunbeamMat = createSunbeamMaterial();
   const snowMat = createSnowParticleMaterial();
   const rainMat = createRainParticleMaterial();
   const fireflyMat = createFireflyParticleMaterial();
+
+  const terrainMat = terrainHandle.material;
+  const oakBarkMat = oakBarkHandle.material;
+  const birchBarkMat = birchBarkHandle.material;
+  const canopyMat = canopyHandle.material;
+  const grassMat = grassHandle.material;
+  const fernMat = fernHandle.material;
+  const rockMat = rockHandle.material;
 
   snowMat.uniforms.uPixelRatio.value = pixelRatio;
   rainMat.uniforms.uPixelRatio.value = pixelRatio;
@@ -867,6 +937,7 @@ export function createForestScene(container: HTMLElement): ForestSceneController
   }
   terrainGeo.computeVertexNormals();
   const terrainMesh = new THREE.Mesh(terrainGeo, terrainMat);
+  terrainMesh.receiveShadow = true;
   scene.add(terrainMesh);
 
   // Deterministic placement helpers
@@ -916,8 +987,14 @@ export function createForestScene(container: HTMLElement): ForestSceneController
 
   // 1. Three Realistic Deciduous Tree Archetypes (1,900 trees total)
   const oakGeo = buildOakArchetype();
-  const oakTrunks = new THREE.InstancedMesh(oakGeo.trunk, barkMat, OAK_COUNT);
+  const oakTrunks = new THREE.InstancedMesh(oakGeo.trunk, oakBarkMat, OAK_COUNT);
   const oakCrowns = new THREE.InstancedMesh(oakGeo.crown, canopyMat, OAK_COUNT);
+  oakTrunks.castShadow = true;
+  oakTrunks.receiveShadow = true;
+  oakTrunks.customDepthMaterial = barkDepthHandle.material;
+  oakCrowns.castShadow = true;
+  oakCrowns.receiveShadow = true;
+  oakCrowns.customDepthMaterial = canopyDepthHandle.material;
 
   for (let i = 0; i < OAK_COUNT; i++) {
     const { x, z } = sampleWoodlandCoord(0.04, 0.22, 6);
@@ -933,13 +1010,13 @@ export function createForestScene(container: HTMLElement): ForestSceneController
     oakTrunks.setMatrixAt(i, dummy.matrix);
     oakCrowns.setMatrixAt(i, dummy.matrix);
 
-    const barkTone = 0.88 + rng() * 0.22;
-    tmpColor.setRGB(barkTone * 1.04, barkTone * 0.98, barkTone * 0.90);
+    const barkTone = 0.86 + rng() * 0.16;
+    tmpColor.setRGB(barkTone * 1.02, barkTone * 0.96, barkTone * 0.88);
     oakTrunks.setColorAt(i, tmpColor);
 
     const hue = 0.23 + rng() * 0.09;
     const sat = 0.38 + rng() * 0.24;
-    const light = 0.44 + rng() * 0.18;
+    const light = 0.42 + rng() * 0.16;
     tmpColor.setHSL(hue, sat, light);
     oakCrowns.setColorAt(i, tmpColor);
   }
@@ -950,34 +1027,69 @@ export function createForestScene(container: HTMLElement): ForestSceneController
   scene.add(oakTrunks, oakCrowns);
 
   const birchGeo = buildBirchArchetype();
-  const birchTrunks = new THREE.InstancedMesh(birchGeo.trunk, barkMat, BIRCH_COUNT);
+  const birchTrunks = new THREE.InstancedMesh(birchGeo.trunk, birchBarkMat, BIRCH_COUNT);
   const birchCrowns = new THREE.InstancedMesh(birchGeo.crown, canopyMat, BIRCH_COUNT);
+  birchTrunks.castShadow = true;
+  birchTrunks.receiveShadow = true;
+  birchTrunks.customDepthMaterial = barkDepthHandle.material;
+  birchCrowns.castShadow = true;
+  birchCrowns.receiveShadow = true;
+  birchCrowns.customDepthMaterial = canopyDepthHandle.material;
+
+  const heroBirchTrees: { z: number; side: -1 | 1; dist: number; yaw: number; tiltZ: number; scale: number }[] = [
+    // Prominent foreground silver birch on the right edge of the trail matching UE5 reference composition
+    { z: 10.6, side: 1, dist: 2.95, yaw: 0.45, tiltZ: -0.045, scale: 1.18 },
+    { z: 4.5, side: -1, dist: 4.45, yaw: 1.9, tiltZ: 0.035, scale: 1.06 },
+  ];
 
   for (let i = 0; i < BIRCH_COUNT; i++) {
-    const { x, z } = sampleWoodlandCoord(0.04, 0.26, 6);
+    let x = 0;
+    let z = 0;
+    let scaleH = 0.78 + rng() * 0.48;
+    let yaw = rng() * Math.PI * 2;
+    let tiltX = (rng() - 0.5) * 0.10;
+    let tiltZ = (rng() - 0.5) * 0.10;
+
+    if (i < heroBirchTrees.length) {
+      const hb = heroBirchTrees[i];
+      z = hb.z;
+      let dist = hb.dist;
+      x = getTrailCenterX(z) + hb.side * dist;
+      while (getTrailFactor(x, z) >= 0.04) {
+        dist += 0.30;
+        x = getTrailCenterX(z) + hb.side * dist;
+      }
+      scaleH = hb.scale;
+      yaw = hb.yaw;
+      tiltX = 0.02;
+      tiltZ = hb.tiltZ;
+    } else {
+      const sampled = sampleWoodlandCoord(0.04, 0.26, 6);
+      x = sampled.x;
+      z = sampled.z;
+    }
+
     const y = getTerrainHeight(x, z) - 0.12;
-    const scaleH = 0.78 + rng() * 0.48;
-    const scaleW = scaleH * (0.85 + rng() * 0.25);
+    const scaleW = scaleH * (0.88 + rng() * 0.22);
 
     dummy.position.set(x, y, z);
-    dummy.rotation.set((rng() - 0.5) * 0.10, rng() * Math.PI * 2, (rng() - 0.5) * 0.10);
+    dummy.rotation.set(tiltX, yaw, tiltZ);
     dummy.scale.set(scaleW, scaleH, scaleW);
     dummy.updateMatrix();
 
     birchTrunks.setMatrixAt(i, dummy.matrix);
     birchCrowns.setMatrixAt(i, dummy.matrix);
 
-    // Lighter grey/silver birch bark via instanceColor (>1.15 triggers papery silver-white bark shader)
-    const silver = 1.68 + rng() * 0.30;
+    const silver = 0.88 + rng() * 0.12;
     tmpColor.setRGB(silver, silver * 0.99, silver * 0.97);
     birchTrunks.setColorAt(i, tmpColor);
 
     const variant = rng();
     if (variant < 0.78) {
-      tmpColor.setHSL(0.22 + rng() * 0.08, 0.44 + rng() * 0.22, 0.50 + rng() * 0.18);
+      tmpColor.setHSL(0.22 + rng() * 0.08, 0.44 + rng() * 0.22, 0.46 + rng() * 0.16);
     } else {
       // Sunlit golden-lime birch canopy accent
-      tmpColor.setHSL(0.15 + rng() * 0.05, 0.52 + rng() * 0.20, 0.54 + rng() * 0.16);
+      tmpColor.setHSL(0.15 + rng() * 0.05, 0.52 + rng() * 0.20, 0.50 + rng() * 0.14);
     }
     birchCrowns.setColorAt(i, tmpColor);
   }
@@ -988,8 +1100,14 @@ export function createForestScene(container: HTMLElement): ForestSceneController
   scene.add(birchTrunks, birchCrowns);
 
   const oldGrowthGeo = buildOldGrowthArchetype();
-  const oldGrowthTrunks = new THREE.InstancedMesh(oldGrowthGeo.trunk, barkMat, OLD_GROWTH_COUNT);
+  const oldGrowthTrunks = new THREE.InstancedMesh(oldGrowthGeo.trunk, oakBarkMat, OLD_GROWTH_COUNT);
   const oldGrowthCrowns = new THREE.InstancedMesh(oldGrowthGeo.crown, canopyMat, OLD_GROWTH_COUNT);
+  oldGrowthTrunks.castShadow = true;
+  oldGrowthTrunks.receiveShadow = true;
+  oldGrowthTrunks.customDepthMaterial = barkDepthHandle.material;
+  oldGrowthCrowns.castShadow = true;
+  oldGrowthCrowns.receiveShadow = true;
+  oldGrowthCrowns.customDepthMaterial = canopyDepthHandle.material;
 
   // Curated picturesque leaning trees flanking both sides of the winding trail corridor
   const heroTrailTrees: { z: number; side: -1 | 1; dist: number; yawOffset: number; scale: number }[] = [
@@ -1048,9 +1166,10 @@ export function createForestScene(container: HTMLElement): ForestSceneController
   if (oldGrowthCrowns.instanceColor) oldGrowthCrowns.instanceColor.needsUpdate = true;
   scene.add(oldGrowthTrunks, oldGrowthCrowns);
 
-  // 2. Arched Pinnate Fern Carpet (4,200 rosettes, lush along trail banks)
+  // 2. Arched Pinnate Fern Carpet (4,800 rosettes, lush along trail banks)
   const fernGeo = buildFernRosetteGeometry();
   const fernMesh = new THREE.InstancedMesh(fernGeo, fernMat, FERN_COUNT);
+  fernMesh.receiveShadow = true;
 
   for (let i = 0; i < FERN_COUNT; i++) {
     let x = 0;
@@ -1090,9 +1209,10 @@ export function createForestScene(container: HTMLElement): ForestSceneController
   if (fernMesh.instanceColor) fernMesh.instanceColor.needsUpdate = true;
   scene.add(fernMesh);
 
-  // 3. Fine Grass Meadows (26,000 tufts, omitted from dirt trail center: getTrailFactor < 0.45)
+  // 3. Fine Grass Meadows (30,000 tufts, omitted from dirt trail center: getTrailFactor < 0.45)
   const grassGeo = buildGrassTuftGeometry();
   const grassMesh = new THREE.InstancedMesh(grassGeo, grassMat, GRASS_COUNT);
+  grassMesh.receiveShadow = true;
 
   for (let i = 0; i < GRASS_COUNT; i++) {
     let x = 0;
@@ -1140,6 +1260,8 @@ export function createForestScene(container: HTMLElement): ForestSceneController
   // 4. Smooth High-Subdivision Mossy Boulders (180 instances, including foreground hero bank rocks)
   const rockGeo = buildRockGeometry();
   const rockMesh = new THREE.InstancedMesh(rockGeo, rockMat, ROCK_COUNT);
+  rockMesh.castShadow = true;
+  rockMesh.receiveShadow = true;
 
   const heroRocks = [
     { z: 12.6, side: 1, dist: 2.35, sx: 1.05, sy: 0.72, sz: 0.95 },
@@ -1297,9 +1419,20 @@ export function createForestScene(container: HTMLElement): ForestSceneController
     fireflies: 0,
   };
 
-  const lightingMaterials = [terrainMat, barkMat, canopyMat, grassMat, fernMat, rockMat];
-  const dappleMaterials = [terrainMat, grassMat, fernMat, rockMat];
+  const lightingHandles = [
+    terrainHandle,
+    oakBarkHandle,
+    birchBarkHandle,
+    canopyHandle,
+    grassHandle,
+    fernHandle,
+    rockHandle,
+  ];
+  const sunTintHandles = [canopyHandle, grassHandle, fernHandle];
+  const dappleHandles = [terrainHandle, grassHandle, fernHandle, rockHandle];
   const forestLightDir = new THREE.Vector3();
+  const shadowFrustumSpan = 92;
+  const shadowTexelWorld = shadowFrustumSpan / 2048;
   let elapsedTime = 0;
   let cloudTime = 0;
   let smoothedSunTransmission = 1;
@@ -1428,44 +1561,74 @@ export function createForestScene(container: HTMLElement): ForestSceneController
     const dayLightBlend = THREE.MathUtils.smoothstep(atmosphere.sunDir.y, -0.02, 0.06);
     forestLightDir.copy(atmosphere.moonDir).lerp(atmosphere.sunDir, dayLightBlend).normalize();
 
-    for (const mat of lightingMaterials) {
-      mat.uniforms.uSunDir.value.copy(forestLightDir);
-      mat.uniforms.uSunColor.value.copy(atmosphere.sunColor);
-      mat.uniforms.uHemisphereSky.value.copy(atmosphere.hemiSky);
-      mat.uniforms.uHemisphereGround.value.copy(atmosphere.hemiGround);
-      mat.uniforms.uFogColor.value.copy(atmosphere.fog);
-      mat.uniforms.uFogDensity.value = atmosphere.fogDensity;
-      mat.uniforms.uMistGlow.value = atmosphere.mistGlow;
-      mat.uniforms.uTime.value = elapsedTime;
-      mat.uniforms.uWetness.value = simState.wetness;
-      mat.uniforms.uCloudTime.value = cloudTime;
-      mat.uniforms.uCloudCoverage.value = effectiveCoverage;
-      mat.uniforms.uCloudStyle.value = styleIndex;
-      mat.uniforms.uSunTransmission.value = smoothedSunTransmission;
+    // Texel-snapped DirectionalLight frustum following camera walk to eliminate shadow shimmering
+    const snapX = Math.round(camera.position.x / shadowTexelWorld) * shadowTexelWorld;
+    const snapZ = Math.round(camera.position.z / shadowTexelWorld) * shadowTexelWorld;
+    const snapGroundY = getTerrainHeight(snapX, snapZ);
+    sunLight.target.position.set(snapX, snapGroundY, snapZ);
+    sunLight.position.copy(sunLight.target.position).addScaledVector(forestLightDir, 76);
+    sunLight.target.updateMatrixWorld();
+
+    sunLight.color.copy(atmosphere.sunColor);
+    const dayElevationFactor = THREE.MathUtils.smoothstep(atmosphere.sunDir.y, -0.05, 0.25);
+    sunLight.intensity =
+      dayElevationFactor > 0.01
+        ? (0.48 + 3.05 * smoothedSunTransmission) * (0.28 + 0.72 * dayElevationFactor)
+        : 0.40;
+
+    hemiLight.color.copy(atmosphere.hemiSky);
+    hemiLight.groundColor.copy(atmosphere.hemiGround);
+    hemiLight.intensity = 0.55 + 0.45 * THREE.MathUtils.smoothstep(atmosphere.sunDir.y, -0.1, 0.3);
+
+    scene.environmentIntensity = 0.32 + 0.44 * dayElevationFactor;
+    sceneFog.color.copy(atmosphere.fog);
+    sceneFog.density = atmosphere.fogDensity;
+
+    for (const handle of lightingHandles) {
+      handle.uniforms.uSunDir.value.copy(forestLightDir);
+      handle.uniforms.uTime.value = elapsedTime;
+      handle.uniforms.uWetness.value = simState.wetness;
+      handle.uniforms.uCloudTime.value = cloudTime;
+      handle.uniforms.uCloudCoverage.value = effectiveCoverage;
+      handle.uniforms.uCloudStyle.value = styleIndex;
+      handle.uniforms.uSunTransmission.value = smoothedSunTransmission;
     }
 
-    for (const mat of dappleMaterials) {
-      mat.uniforms.uDappleStrength.value = atmosphere.dappleStrength;
+    for (const handle of sunTintHandles) {
+      handle.uniforms.uSunColor.value.copy(atmosphere.sunColor);
     }
 
-    terrainMat.uniforms.uSnowDepth.value = simState.snowDepthCm;
-    terrainMat.uniforms.uSnowCoverage.value = simState.snowCoverage;
+    for (const handle of dappleHandles) {
+      handle.uniforms.uDappleStrength.value = atmosphere.dappleStrength;
+    }
 
-    barkMat.uniforms.uWindStrength.value = controls.windStrength;
-    barkMat.uniforms.uCanopySnow.value = simState.canopySnow;
+    terrainHandle.uniforms.uSnowDepth.value = simState.snowDepthCm;
+    terrainHandle.uniforms.uSnowCoverage.value = simState.snowCoverage;
 
-    canopyMat.uniforms.uWindStrength.value = controls.windStrength;
-    canopyMat.uniforms.uCanopySnow.value = simState.canopySnow;
+    oakBarkHandle.uniforms.uWindStrength.value = controls.windStrength;
+    oakBarkHandle.uniforms.uCanopySnow.value = simState.canopySnow;
 
-    grassMat.uniforms.uWindStrength.value = controls.windStrength;
-    grassMat.uniforms.uSnowCoverage.value = simState.snowCoverage;
-    grassMat.uniforms.uSnowDepth.value = simState.snowDepthCm;
+    birchBarkHandle.uniforms.uWindStrength.value = controls.windStrength;
+    birchBarkHandle.uniforms.uCanopySnow.value = simState.canopySnow;
 
-    fernMat.uniforms.uWindStrength.value = controls.windStrength;
-    fernMat.uniforms.uSnowCoverage.value = simState.snowCoverage;
-    fernMat.uniforms.uCanopySnow.value = simState.canopySnow;
+    barkDepthHandle.uniforms.uTime.value = elapsedTime;
+    barkDepthHandle.uniforms.uWindStrength.value = controls.windStrength;
 
-    rockMat.uniforms.uSnowCoverage.value = simState.snowCoverage;
+    canopyHandle.uniforms.uWindStrength.value = controls.windStrength;
+    canopyHandle.uniforms.uCanopySnow.value = simState.canopySnow;
+
+    canopyDepthHandle.uniforms.uTime.value = elapsedTime;
+    canopyDepthHandle.uniforms.uWindStrength.value = controls.windStrength;
+
+    grassHandle.uniforms.uWindStrength.value = controls.windStrength;
+    grassHandle.uniforms.uSnowCoverage.value = simState.snowCoverage;
+    grassHandle.uniforms.uSnowDepth.value = simState.snowDepthCm;
+
+    fernHandle.uniforms.uWindStrength.value = controls.windStrength;
+    fernHandle.uniforms.uSnowCoverage.value = simState.snowCoverage;
+    fernHandle.uniforms.uCanopySnow.value = simState.canopySnow;
+
+    rockHandle.uniforms.uSnowCoverage.value = simState.snowCoverage;
 
     mistMat.uniforms.uMistColor.value.copy(atmosphere.fog);
     mistMat.uniforms.uSunColor.value.copy(atmosphere.sunColor);
@@ -1556,6 +1719,11 @@ export function createForestScene(container: HTMLElement): ForestSceneController
       }
     });
 
+    barkDepthHandle.material.dispose();
+    canopyDepthHandle.material.dispose();
+    sunLight.shadow.map?.dispose();
+    envRT.dispose();
+    pmremGenerator.dispose();
     textures.dispose();
 
     if (renderer.domElement.parentElement === container) {

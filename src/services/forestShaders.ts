@@ -146,830 +146,1056 @@ float computeCloudDirectMask(
 }
 `;
 
-export function createTerrainMaterial(groundDetailMap: THREE.Texture): THREE.ShaderMaterial {
-  return new THREE.ShaderMaterial({
-    uniforms: {
-      uMap: { value: groundDetailMap },
-      uSunDir: { value: new THREE.Vector3(0.45, 0.72, -0.52).normalize() },
-      uSunColor: { value: new THREE.Color(0xfff1d6) },
-      uHemisphereSky: { value: new THREE.Color(0xcdd6c5) },
-      uHemisphereGround: { value: new THREE.Color(0x283520) },
-      uFogColor: { value: new THREE.Color(0xcdd6c5) },
-      uFogDensity: { value: 0.0115 },
-      uMistGlow: { value: 0.65 },
-      uDappleStrength: { value: 0.85 },
-      uSnowDepth: { value: 0 },
-      uSnowCoverage: { value: 0 },
-      uWetness: { value: 0.08 },
-      uTime: { value: 0 },
-      uCloudTime: { value: 0 },
-      uCloudCoverage: { value: 0.48 },
-      uCloudStyle: { value: 0 },
-      uSunTransmission: { value: 1 },
-    },
-    vertexShader: /* glsl */ `
-      uniform float uSnowDepth;
-      varying vec3 vWorldPos;
-      varying vec3 vWorldNormal;
+const GLSL_NOISE_AND_COLSPACE = /* glsl */ `
+vec3 srgbToLinear(vec3 c) {
+  return pow(max(c, vec3(0.0)), vec3(2.2));
+}
+`;
 
-      void main() {
-        vec3 pos = position;
-        vec3 wNormal = normalize(mat3(modelMatrix) * normal);
-        float flatFactor = smoothstep(0.32, 0.92, wNormal.y);
-        pos.y += min(uSnowDepth * 0.0055, 0.35) * flatFactor;
+export interface PbrMaterialHandle<T extends THREE.Material = THREE.MeshStandardMaterial> {
+  material: T;
+  uniforms: Record<string, THREE.IUniform>;
+}
 
-        vec4 worldPos = modelMatrix * vec4(pos, 1.0);
-        vWorldPos = worldPos.xyz;
-        vWorldNormal = wNormal;
-        gl_Position = projectionMatrix * viewMatrix * worldPos;
-      }
-    `,
-    fragmentShader: /* glsl */ `
-      uniform sampler2D uMap;
-      uniform vec3 uSunDir;
-      uniform vec3 uSunColor;
-      uniform vec3 uHemisphereSky;
-      uniform vec3 uHemisphereGround;
-      uniform vec3 uFogColor;
-      uniform float uFogDensity;
-      uniform float uMistGlow;
-      uniform float uDappleStrength;
-      uniform float uSnowDepth;
-      uniform float uSnowCoverage;
-      uniform float uWetness;
-      uniform float uTime;
-      uniform float uCloudTime;
-      uniform float uCloudCoverage;
-      uniform float uCloudStyle;
-      uniform float uSunTransmission;
+export interface TerrainTextureInputs {
+  groundDetailMap: THREE.Texture;
+  groundNormalMap: THREE.Texture;
+  groundRoughnessMap: THREE.Texture;
+}
 
-      varying vec3 vWorldPos;
-      varying vec3 vWorldNormal;
+export interface BarkMaterialInputs {
+  map: THREE.Texture;
+  normalMap: THREE.Texture;
+  roughnessMap?: THREE.Texture;
+  isBirch?: boolean;
+}
 
-      ${GLSL_NOISE_AND_FOG}
+export function createPbrTerrainMaterial(textures: TerrainTextureInputs): PbrMaterialHandle {
+  textures.groundNormalMap.repeat.set(64, 64);
+  textures.groundRoughnessMap.repeat.set(64, 64);
 
-      void main() {
-        vec3 N = safeNormalize(vWorldNormal, vec3(0.0, 1.0, 0.0));
-        vec3 V = safeNormalize(cameraPosition - vWorldPos, vec3(0.0, 0.0, 1.0));
-        vec3 L = safeNormalize(uSunDir, vec3(0.0, 1.0, 0.0));
+  const uniforms: Record<string, THREE.IUniform> = {
+    uGroundDetailMap: { value: textures.groundDetailMap },
+    uSunDir: { value: new THREE.Vector3(0.45, 0.72, -0.52).normalize() },
+    uDappleStrength: { value: 0.65 },
+    uSnowDepth: { value: 0 },
+    uSnowCoverage: { value: 0 },
+    uWetness: { value: 0.08 },
+    uTime: { value: 0 },
+    uCloudTime: { value: 0 },
+    uCloudCoverage: { value: 0.48 },
+    uCloudStyle: { value: 0 },
+    uSunTransmission: { value: 1 },
+  };
 
-        vec2 xz = vWorldPos.xz;
-        float macro = fbm4(xz * 0.055);
-        float mid = fbm4(xz * 0.24 + vec2(11.3, 4.7));
-        float micro = noise2(xz * 2.2);
+  const material = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    normalMap: textures.groundNormalMap,
+    normalScale: new THREE.Vector2(1.25, 1.25),
+    roughnessMap: textures.groundRoughnessMap,
+    roughness: 0.92,
+    metalness: 0.0,
+    envMapIntensity: 0.75,
+  });
 
-        // Sample seamless ground detail texture at two incommensurate scales
-        vec3 texA = texture2D(uMap, xz * 0.26).rgb;
-        vec3 texB = texture2D(uMap, xz * 0.68 + vec2(0.37, 0.71)).rgb;
-        vec3 groundTex = mix(texA, texB, 0.42);
-        vec3 detailBoost = clamp((groundTex - vec3(0.24)) * 2.1 + vec3(0.96), vec3(0.55), vec3(1.55));
+  material.customProgramCacheKey = () => 'topog-pbr-terrain-v1';
+  material.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms);
 
-        // Winding dirt trail matching getTrailCenterX / getTrailFactor
-        float trailCenterX = sin(xz.y * 0.075) * 3.6 + sin(xz.y * 0.028 + 0.8) * 2.1;
-        float dxdz = 3.6 * 0.075 * cos(xz.y * 0.075) + 2.1 * 0.028 * cos(xz.y * 0.028 + 0.8);
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        /* glsl */ `
+        #include <common>
+        uniform float uSnowDepth;
+        varying vec3 vCustomWorldPos;
+        varying vec3 vCustomWorldNormal;
+        `
+      )
+      .replace(
+        '#include <begin_vertex>',
+        /* glsl */ `
+        #include <begin_vertex>
+        vec3 baseWorldNormal = normalize(mat3(modelMatrix) * normal);
+        float snowFlat = smoothstep(0.32, 0.92, baseWorldNormal.y);
+        transformed.y += min(uSnowDepth * 0.0055, 0.35) * snowFlat;
+        `
+      )
+      .replace(
+        '#include <project_vertex>',
+        /* glsl */ `
+        #include <project_vertex>
+        vec4 cWorldPos = modelMatrix * vec4(transformed, 1.0);
+        vCustomWorldPos = cWorldPos.xyz;
+        vCustomWorldNormal = baseWorldNormal;
+        `
+      );
+
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        /* glsl */ `
+        #include <common>
+        ${GLSL_NOISE_AND_FOG}
+        ${GLSL_NOISE_AND_COLSPACE}
+        uniform sampler2D uGroundDetailMap;
+        uniform vec3 uSunDir;
+        uniform float uDappleStrength;
+        uniform float uSnowDepth;
+        uniform float uSnowCoverage;
+        uniform float uWetness;
+        uniform float uTime;
+        uniform float uCloudTime;
+        uniform float uCloudCoverage;
+        uniform float uCloudStyle;
+        uniform float uSunTransmission;
+        varying vec3 vCustomWorldPos;
+        varying vec3 vCustomWorldNormal;
+        `
+      )
+      .replace(
+        '#include <map_fragment>',
+        /* glsl */ `
+        #include <map_fragment>
+        vec2 tXZ = vCustomWorldPos.xz;
+        vec3 geoN = safeNormalize(vCustomWorldNormal, vec3(0.0, 1.0, 0.0));
+        float tMacro = fbm4(tXZ * 0.055);
+        float tMid = fbm4(tXZ * 0.24 + vec2(11.3, 4.7));
+        float tMicro = noise2(tXZ * 2.2);
+
+        // Multi-scale soil, bark mulch, fallen leaf & moss detail (already linear via sRGB texture upload)
+        vec3 gTexA = texture2D(uGroundDetailMap, tXZ * 0.26).rgb;
+        vec3 gTexB = texture2D(uGroundDetailMap, tXZ * 0.68 + vec2(0.37, 0.71)).rgb;
+        vec3 gDetail = mix(gTexA, gTexB, 0.42);
+        vec3 detailBoost = clamp((gDetail - vec3(0.08)) * 1.9 + vec3(0.88), vec3(0.55), vec3(1.55));
+
+        // Winding dirt footpath matching getTrailCenterX / getTrailFactor
+        float trailCenterX = sin(tXZ.y * 0.075) * 3.6 + sin(tXZ.y * 0.028 + 0.8) * 2.1;
+        float dxdz = 3.6 * 0.075 * cos(tXZ.y * 0.075) + 2.1 * 0.028 * cos(tXZ.y * 0.028 + 0.8);
         float perpScale = inversesqrt(1.0 + dxdz * dxdz);
-        float trailEdgeNoise = (fbm4(xz * 0.35 + vec2(7.1, -3.4)) - 0.5) * 0.55;
-        float trailDist = abs(xz.x - trailCenterX) * perpScale + trailEdgeNoise;
+        float trailEdgeNoise = (fbm4(tXZ * 0.35 + vec2(7.1, -3.4)) - 0.5) * 0.55;
+        float trailDist = abs(tXZ.x - trailCenterX) * perpScale + trailEdgeNoise;
         float trailMask = 1.0 - smoothstep(1.1, 2.5, trailDist);
         float trailCore = 1.0 - smoothstep(0.35, 1.35, trailDist);
 
-        // Lush mossy woodland floor + fallen-leaf humus
-        vec3 mossDeep = vec3(0.15, 0.27, 0.12);
-        vec3 mossEmerald = vec3(0.26, 0.42, 0.18);
-        vec3 mossCol = mix(mossDeep, mossEmerald, smoothstep(0.25, 0.78, mid));
+        // Linear woodland floor palette
+        vec3 mossDeep = srgbToLinear(vec3(0.14, 0.25, 0.11));
+        vec3 mossEmerald = srgbToLinear(vec3(0.24, 0.39, 0.16));
+        vec3 mossCol = mix(mossDeep, mossEmerald, smoothstep(0.25, 0.78, tMid));
 
-        vec3 humus = vec3(0.26, 0.18, 0.12);
-        float humusMask = smoothstep(0.45, 0.75, macro + (micro - 0.5) * 0.22);
-        vec3 woodlandFloor = mix(mossCol, humus, humusMask * 0.60) * detailBoost;
+        vec3 humus = srgbToLinear(vec3(0.25, 0.17, 0.11));
+        float humusMask = smoothstep(0.45, 0.75, tMacro + (tMicro - 0.5) * 0.22);
+        vec3 woodlandFloor = mix(mossCol, humus, humusMask * 0.62) * detailBoost;
 
-        // Warm ochre sunlit dirt footpath with compacted center & fallen-leaf shoulder
-        vec3 trailCenterCol = vec3(0.56, 0.43, 0.28);
-        vec3 trailShoulderCol = vec3(0.37, 0.28, 0.18);
-        vec3 trailDirt = mix(trailShoulderCol, trailCenterCol, trailCore * 0.85 + 0.15 * mid);
-        trailDirt *= mix(vec3(0.84), vec3(1.18), groundTex * 1.9);
-        float pebble = hash21(floor(xz * 9.5));
-        trailDirt *= mix(0.92, 1.12, smoothstep(0.75, 0.98, pebble));
+        vec3 trailCenterCol = srgbToLinear(vec3(0.52, 0.38, 0.23));
+        vec3 trailShoulderCol = srgbToLinear(vec3(0.34, 0.25, 0.15));
+        vec3 trailDirt = mix(trailShoulderCol, trailCenterCol, trailCore * 0.85 + 0.15 * tMid);
+        trailDirt *= clamp(gDetail * 2.4 + vec3(0.65), vec3(0.75), vec3(1.30));
+        float pebble = hash21(floor(tXZ * 9.5));
+        trailDirt *= mix(0.90, 1.14, smoothstep(0.75, 0.98, pebble));
 
         vec3 floorCol = mix(woodlandFloor, trailDirt, trailMask);
 
-        // Rocky steep slopes
-        float slope = 1.0 - smoothstep(0.58, 0.88, N.y);
-        vec3 rockBase = vec3(0.35, 0.37, 0.39) * (0.78 + 0.42 * mid);
-        vec3 albedo = mix(floorCol, rockBase, clamp(slope * 1.12, 0.0, 1.0));
+        float slope = 1.0 - smoothstep(0.58, 0.88, geoN.y);
+        vec3 rockBase = srgbToLinear(vec3(0.33, 0.35, 0.37)) * (0.78 + 0.42 * tMid);
+        vec3 groundAlbedo = mix(floorCol, rockBase, clamp(slope * 1.12, 0.0, 1.0));
 
-        // Rain wetness: muddy dark soil + glossy water puddles along path & hollows
-        float puddleNoise = smoothstep(0.44, 0.78, mid) * (1.0 - slope * 0.75);
-        float trailPuddle = trailCore * smoothstep(0.40, 0.72, noise2(xz * 0.65));
+        // Rain puddle & damp dark soil
+        float puddleNoise = smoothstep(0.44, 0.78, tMid) * (1.0 - slope * 0.75);
+        float trailPuddle = trailCore * smoothstep(0.40, 0.72, noise2(tXZ * 0.65));
         float wetAmount = clamp(uWetness * (0.62 + 0.48 * puddleNoise + 0.32 * trailPuddle), 0.0, 1.0);
-        albedo *= mix(1.0, 0.50, wetAmount);
+        groundAlbedo *= mix(1.0, 0.52, wetAmount);
 
-        // Dynamic snow blanket driven by uSnowCoverage & uSnowDepth
-        float snowNoise = fbm4(xz * 0.085 + vec2(3.1, 8.9)) * 0.65 + micro * 0.35;
-        float cliffResistance = (1.0 - smoothstep(0.42, 0.86, N.y)) * 0.48;
+        // Snow accumulation blanket
+        float snowNoise = fbm4(tXZ * 0.085 + vec2(3.1, 8.9)) * 0.65 + tMicro * 0.35;
+        float cliffResistance = (1.0 - smoothstep(0.42, 0.86, geoN.y)) * 0.48;
         float depthFactor = clamp(uSnowDepth / 18.0, 0.0, 1.0);
-        float warmHollow = (1.0 - smoothstep(-1.5, 4.5, vWorldPos.y)) * 0.08 * (1.0 - depthFactor * 0.6);
+        float warmHollow = (1.0 - smoothstep(-1.5, 4.5, vCustomWorldPos.y)) * 0.08 * (1.0 - depthFactor * 0.6);
         float snowField = uSnowCoverage * 1.18 - snowNoise * 0.34 - cliffResistance - warmHollow;
         float snowMask = smoothstep(0.02, 0.24, snowField) * smoothstep(0.0, 0.06, uSnowCoverage);
 
-        vec3 snowAlbedo = mix(vec3(0.84, 0.90, 0.98), vec3(0.97, 0.985, 1.0), smoothstep(0.35, 0.85, N.y));
-        vec3 snowN = safeNormalize(
-          N + vec3((micro - 0.5) * 0.12, 0.0, (noise2(xz * 3.1 + 5.0) - 0.5) * 0.12),
-          N
-        );
-        vec3 effN = safeNormalize(mix(N, snowN, snowMask), N);
+        vec3 snowAlbedo = mix(srgbToLinear(vec3(0.82, 0.89, 0.98)), srgbToLinear(vec3(0.95, 0.97, 1.0)), smoothstep(0.35, 0.85, geoN.y));
+        diffuseColor.rgb = mix(groundAlbedo, snowAlbedo, snowMask);
+        `
+      )
+      .replace(
+        '#include <roughnessmap_fragment>',
+        /* glsl */ `
+        #include <roughnessmap_fragment>
+        // Drop roughness dramatically in rainwater puddles; crystalline satin in snow
+        float puddleMask = smoothstep(0.48, 0.82, fbm4(vCustomWorldPos.xz * 0.24 + vec2(11.3, 4.7)));
+        float puddleRough = mix(0.34, 0.08, puddleMask) * clamp(uWetness, 0.0, 1.0);
+        roughnessFactor = mix(roughnessFactor, 0.14, clamp(uWetness * (0.55 + 0.45 * puddleMask), 0.0, 0.92));
+        roughnessFactor = mix(roughnessFactor, 0.58, snowMask);
+        roughnessFactor = clamp(min(roughnessFactor, mix(1.0, puddleRough + 0.06, clamp(uWetness, 0.0, 1.0) * (1.0 - snowMask))), 0.06, 0.98);
+        `
+      )
+      .replace(
+        '#include <lights_fragment_end>',
+        /* glsl */ `
+        #include <lights_fragment_end>
+        vec3 sunDirL = safeNormalize(uSunDir, vec3(0.0, 1.0, 0.0));
+        float cloudMask = computeCloudDirectMask(vCustomWorldPos.xz, sunDirL, uCloudTime, uCloudCoverage, uCloudStyle, uSunTransmission);
+        float dapple = computeDappledSun(vCustomWorldPos.xz, uTime, trailMask, uDappleStrength);
+        reflectedLight.directDiffuse *= cloudMask * dapple;
+        reflectedLight.directSpecular *= cloudMask * dapple;
+        reflectedLight.indirectDiffuse *= mix(1.22, 1.0, cloudMask);
+        `
+      );
+  };
 
-        float NdotL = max(dot(effN, L), 0.0);
-        float dapple = computeDappledSun(xz, uTime, trailMask, uDappleStrength);
-        float directMask = computeCloudDirectMask(xz, L, uCloudTime, uCloudCoverage, uCloudStyle, uSunTransmission);
-        float ambientBoost = mix(1.24, 1.0, directMask);
-
-        float hemi = 0.5 + 0.5 * effN.y;
-        vec3 ambient = mix(uHemisphereGround, uHemisphereSky, hemi);
-        vec3 snowShadowTint = mix(ambient, uHemisphereSky * 0.92 + vec3(0.10, 0.15, 0.24), 0.45);
-        vec3 effAmbient = mix(ambient, snowShadowTint, snowMask);
-
-        vec3 hv = L + V;
-        vec3 H = dot(hv, hv) > 1e-6 ? normalize(hv) : effN;
-        float wetSpec = pow(clamp(dot(effN, H), 0.0, 1.0), 48.0) * wetAmount * (1.0 - snowMask) * 0.65;
-        float sparkleHash = hash21(floor(xz * 18.0) + floor(V.xz * 6.0));
-        float snowSparkle = step(0.982, sparkleHash) * pow(clamp(dot(effN, H), 0.0, 1.0), 18.0) * snowMask * 0.95;
-
-        float rim = pow(1.0 - clamp(dot(effN, V), 0.0, 1.0), 3.2) * 0.14;
-        vec3 surfaceCol = mix(albedo, snowAlbedo, snowMask);
-
-        vec3 lit = surfaceCol * (effAmbient * 0.64 * ambientBoost + uSunColor * NdotL * dapple * directMask * 1.05)
-          + uSunColor * (wetSpec * dapple + snowSparkle) * directMask
-          + uHemisphereSky * rim * (0.30 + 0.70 * snowMask);
-
-        lit = applyWoodlandMist(lit, vWorldPos, uFogColor, uFogDensity, L, uSunColor, uMistGlow);
-        gl_FragColor = vec4(lit, 1.0);
-      }
-    `,
-  });
+  return { material, uniforms };
 }
 
-export function createBarkMaterial(barkMap: THREE.Texture): THREE.ShaderMaterial {
-  return new THREE.ShaderMaterial({
-    uniforms: {
-      uMap: { value: barkMap },
-      uSunDir: { value: new THREE.Vector3(0.45, 0.72, -0.52).normalize() },
-      uSunColor: { value: new THREE.Color(0xfff1d6) },
-      uHemisphereSky: { value: new THREE.Color(0xcdd6c5) },
-      uHemisphereGround: { value: new THREE.Color(0x283520) },
-      uFogColor: { value: new THREE.Color(0xcdd6c5) },
-      uFogDensity: { value: 0.0115 },
-      uMistGlow: { value: 0.65 },
-      uTime: { value: 0 },
-      uWindStrength: { value: 0.25 },
-      uCanopySnow: { value: 0 },
-      uWetness: { value: 0.08 },
-      uCloudTime: { value: 0 },
-      uCloudCoverage: { value: 0.48 },
-      uCloudStyle: { value: 0 },
-      uSunTransmission: { value: 1 },
-    },
-    vertexShader: /* glsl */ `
-      uniform float uTime;
-      uniform float uWindStrength;
-      varying vec3 vWorldPos;
-      varying vec3 vWorldNormal;
-      varying vec2 vUv;
-      varying vec3 vColor;
-      varying float vLocalHeight;
+export function createPbrBarkMaterial(inputs: BarkMaterialInputs): PbrMaterialHandle {
+  const { map, normalMap, roughnessMap, isBirch = false } = inputs;
+  map.repeat.set(2, 4.5);
+  normalMap.repeat.set(2, 4.5);
+  if (roughnessMap) {
+    roughnessMap.repeat.set(2, 4.5);
+  }
 
-      void main() {
-        #ifdef USE_INSTANCING
-          mat4 instMat = instanceMatrix;
-        #else
-          mat4 instMat = mat4(1.0);
-        #endif
+  const uniforms: Record<string, THREE.IUniform> = {
+    uSunDir: { value: new THREE.Vector3(0.45, 0.72, -0.52).normalize() },
+    uTime: { value: 0 },
+    uWindStrength: { value: 0.25 },
+    uCanopySnow: { value: 0 },
+    uWetness: { value: 0.08 },
+    uCloudTime: { value: 0 },
+    uCloudCoverage: { value: 0.48 },
+    uCloudStyle: { value: 0 },
+    uSunTransmission: { value: 1 },
+  };
 
-        #ifdef USE_INSTANCING_COLOR
-          vColor = instanceColor;
-        #else
-          vColor = vec3(1.0);
-        #endif
+  const material = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map,
+    normalMap,
+    normalScale: new THREE.Vector2(isBirch ? 1.25 : 1.7, isBirch ? 1.25 : 1.7),
+    roughnessMap: roughnessMap ?? null,
+    roughness: isBirch ? 0.72 : 0.92,
+    metalness: 0.0,
+    envMapIntensity: isBirch ? 0.85 : 0.72,
+  });
 
-        vec4 instPos = instMat * vec4(position, 1.0);
-        vec3 basePos = instMat[3].xyz;
-        float h = max(instPos.y - basePos.y, 0.0);
-        float phase = basePos.x * 0.23 + basePos.z * 0.19;
-        float swayAmt = (h * h * 0.0014) * uWindStrength;
-        instPos.x += swayAmt * (sin(uTime * 1.25 + phase) + 0.35 * sin(uTime * 2.6 + phase * 1.7));
-        instPos.z += swayAmt * 0.65 * cos(uTime * 1.05 + phase * 1.3);
+  material.customProgramCacheKey = () =>
+    isBirch ? 'topog-pbr-birch-bark-v1' : 'topog-pbr-oak-bark-v1';
 
-        vec4 worldPos = modelMatrix * instPos;
-        vWorldPos = worldPos.xyz;
+  material.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms);
+
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        /* glsl */ `
+        #include <common>
+        uniform float uTime;
+        uniform float uWindStrength;
+        varying vec3 vCustomWorldPos;
+        varying vec3 vCustomWorldNormal;
+        varying float vLocalHeight;
+        `
+      )
+      .replace(
+        '#include <begin_vertex>',
+        /* glsl */ `
+        #include <begin_vertex>
         vLocalHeight = max(position.y, 0.0);
+        #ifdef USE_INSTANCING
+          vec4 barkInstPos = instanceMatrix * vec4(transformed, 1.0);
+          vec3 barkBasePos = instanceMatrix[3].xyz;
+          float barkH = max(barkInstPos.y - barkBasePos.y, 0.0);
+          float barkPhase = barkBasePos.x * 0.23 + barkBasePos.z * 0.19;
+          float barkSway = (barkH * barkH * 0.0014) * uWindStrength;
+          vec3 worldOffset = vec3(
+            barkSway * (sin(uTime * 1.25 + barkPhase) + 0.35 * sin(uTime * 2.6 + barkPhase * 1.7)),
+            0.0,
+            barkSway * 0.65 * cos(uTime * 1.05 + barkPhase * 1.3)
+          );
+          transformed += mat3(inverse(instanceMatrix)) * worldOffset;
+        #endif
+        `
+      )
+      .replace(
+        '#include <project_vertex>',
+        /* glsl */ `
+        #include <project_vertex>
+        vec4 cWorldPos = vec4(transformed, 1.0);
+        #ifdef USE_INSTANCING
+          cWorldPos = instanceMatrix * cWorldPos;
+        #endif
+        cWorldPos = modelMatrix * cWorldPos;
+        vCustomWorldPos = cWorldPos.xyz;
+        vec3 cObjNorm = vec3(normal);
+        #ifdef USE_INSTANCING
+          cObjNorm = mat3(instanceMatrix) * cObjNorm;
+        #endif
+        vCustomWorldNormal = normalize(mat3(modelMatrix) * cObjNorm);
+        `
+      );
 
-        mat3 instNormalMat = mat3(instMat);
-        vec3 instNorm = normalize(instNormalMat * normal);
-        vWorldNormal = normalize(mat3(modelMatrix) * instNorm);
-        vUv = uv;
-        gl_Position = projectionMatrix * viewMatrix * worldPos;
-      }
-    `,
-    fragmentShader: /* glsl */ `
-      uniform sampler2D uMap;
-      uniform vec3 uSunDir;
-      uniform vec3 uSunColor;
-      uniform vec3 uHemisphereSky;
-      uniform vec3 uHemisphereGround;
-      uniform vec3 uFogColor;
-      uniform float uFogDensity;
-      uniform float uMistGlow;
-      uniform float uCanopySnow;
-      uniform float uWetness;
-      uniform float uCloudTime;
-      uniform float uCloudCoverage;
-      uniform float uCloudStyle;
-      uniform float uSunTransmission;
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        /* glsl */ `
+        #include <common>
+        ${GLSL_NOISE_AND_FOG}
+        ${GLSL_NOISE_AND_COLSPACE}
+        uniform vec3 uSunDir;
+        uniform float uCanopySnow;
+        uniform float uWetness;
+        uniform float uCloudTime;
+        uniform float uCloudCoverage;
+        uniform float uCloudStyle;
+        uniform float uSunTransmission;
+        varying vec3 vCustomWorldPos;
+        varying vec3 vCustomWorldNormal;
+        varying float vLocalHeight;
+        `
+      )
+      .replace(
+        '#include <color_fragment>',
+        /* glsl */ `
+        #include <color_fragment>
+        vec3 barkGeoN = safeNormalize(vCustomWorldNormal, vec3(0.0, 1.0, 0.0));
+        // Subtle woodland moss creeping up root collar
+        float mossNoise = fbm4(vCustomWorldPos.xz * 1.9 + vCustomWorldPos.y * 1.4);
+        float rootMoss = smoothstep(2.3, 0.15, vLocalHeight + (mossNoise - 0.5) * 1.1) *
+          smoothstep(-0.2, 0.55, barkGeoN.y + 0.25);
+        vec3 mossCol = srgbToLinear(vec3(0.16, 0.29, 0.12)) * (0.75 + 0.45 * mossNoise);
+        diffuseColor.rgb = mix(diffuseColor.rgb, mossCol, clamp(rootMoss * 0.62, 0.0, 0.72));
 
-      varying vec3 vWorldPos;
-      varying vec3 vWorldNormal;
-      varying vec2 vUv;
-      varying vec3 vColor;
-      varying float vLocalHeight;
+        // Wet bark darkening
+        diffuseColor.rgb *= mix(1.0, 0.56, clamp(uWetness, 0.0, 1.0));
 
-      ${GLSL_NOISE_AND_FOG}
+        // Windward & upward frost/snow dusting
+        float windward = clamp(barkGeoN.x * 0.45 + barkGeoN.z * 0.35 + 0.2, 0.0, 1.0);
+        float barkSnowDust = smoothstep(0.15, 0.85, barkGeoN.y * 0.75 + windward * 0.55) * uCanopySnow * 0.78;
+        diffuseColor.rgb = mix(diffuseColor.rgb, srgbToLinear(vec3(0.88, 0.93, 0.99)), barkSnowDust);
+        `
+      )
+      .replace(
+        '#include <roughnessmap_fragment>',
+        /* glsl */ `
+        #include <roughnessmap_fragment>
+        roughnessFactor = mix(roughnessFactor, 0.32, clamp(uWetness, 0.0, 1.0) * (1.0 - barkSnowDust));
+        roughnessFactor = mix(roughnessFactor, 0.62, barkSnowDust);
+        `
+      )
+      .replace(
+        '#include <lights_fragment_end>',
+        /* glsl */ `
+        #include <lights_fragment_end>
+        vec3 barkSunL = safeNormalize(uSunDir, vec3(0.0, 1.0, 0.0));
+        float barkCloudMask = computeCloudDirectMask(vCustomWorldPos.xz, barkSunL, uCloudTime, uCloudCoverage, uCloudStyle, uSunTransmission);
+        reflectedLight.directDiffuse *= barkCloudMask;
+        reflectedLight.directSpecular *= barkCloudMask;
+        reflectedLight.indirectDiffuse *= mix(1.22, 1.0, barkCloudMask);
+        `
+      );
+  };
 
-      void main() {
-        vec3 N = safeNormalize(vWorldNormal, vec3(0.0, 1.0, 0.0));
-        vec3 V = safeNormalize(cameraPosition - vWorldPos, vec3(0.0, 0.0, 1.0));
-        vec3 L = safeNormalize(uSunDir, vec3(0.0, 1.0, 0.0));
-
-        vec2 barkUv = vec2(vUv.x * 2.0, vUv.y * 4.5);
-        vec3 barkTex = texture2D(uMap, barkUv).rgb;
-        float barkLuma = dot(barkTex, vec3(0.299, 0.587, 0.114));
-        float isBirch = smoothstep(1.15, 1.65, max(vColor.r, max(vColor.g, vColor.b)));
-        vec3 birchTex = mix(vec3(0.15, 0.13, 0.12), vec3(0.86, 0.85, 0.82), smoothstep(0.14, 0.44, barkLuma));
-        vec3 barkCol = mix(barkTex * vColor, birchTex * (vColor * 0.56), isBirch);
-
-        // Subtle moss creeping up the lower root flare / trunk collar
-        float mossNoise = fbm4(vWorldPos.xz * 1.9 + vWorldPos.y * 1.4);
-        float rootMoss = smoothstep(2.4, 0.15, vLocalHeight + (mossNoise - 0.5) * 1.1) *
-          smoothstep(-0.2, 0.55, N.y + 0.25);
-        vec3 mossCol = vec3(0.18, 0.31, 0.13) * (0.75 + 0.45 * mossNoise);
-        barkCol = mix(barkCol, mossCol, clamp(rootMoss * 0.62, 0.0, 0.72));
-
-        // Damp bark darkening
-        barkCol *= mix(1.0, 0.56, clamp(uWetness, 0.0, 1.0));
-
-        // Frost / snow dusting on windward & upward limbs
-        float windward = clamp(N.x * 0.45 + N.z * 0.35 + 0.2, 0.0, 1.0);
-        float snowDust = smoothstep(0.15, 0.85, N.y * 0.75 + windward * 0.55) * uCanopySnow * 0.78;
-        vec3 albedo = mix(barkCol, vec3(0.88, 0.93, 0.99), snowDust);
-
-        float NdotL = max(dot(N, L), 0.0);
-        float directMask = computeCloudDirectMask(vWorldPos.xz, L, uCloudTime, uCloudCoverage, uCloudStyle, uSunTransmission);
-        float ambientBoost = mix(1.24, 1.0, directMask);
-        float hemi = 0.5 + 0.5 * N.y;
-        vec3 ambient = mix(uHemisphereGround, uHemisphereSky, hemi);
-
-        vec3 hv = L + V;
-        vec3 H = dot(hv, hv) > 1e-6 ? normalize(hv) : N;
-        float wetSpec = pow(clamp(dot(N, H), 0.0, 1.0), 28.0) * uWetness * (1.0 - snowDust) * 0.24;
-
-        vec3 lit = albedo * (ambient * 0.62 * ambientBoost + uSunColor * NdotL * directMask * 0.94)
-          + uSunColor * wetSpec * directMask;
-        lit = applyWoodlandMist(lit, vWorldPos, uFogColor, uFogDensity, L, uSunColor, uMistGlow);
-        gl_FragColor = vec4(lit, 1.0);
-      }
-    `,
-  });
+  return { material, uniforms };
 }
 
-export function createCanopyMaterial(leafClusterMap: THREE.Texture): THREE.ShaderMaterial {
-  return new THREE.ShaderMaterial({
-    side: THREE.DoubleSide,
-    uniforms: {
-      uMap: { value: leafClusterMap },
-      uSunDir: { value: new THREE.Vector3(0.45, 0.72, -0.52).normalize() },
-      uSunColor: { value: new THREE.Color(0xfff1d6) },
-      uHemisphereSky: { value: new THREE.Color(0xcdd6c5) },
-      uHemisphereGround: { value: new THREE.Color(0x283520) },
-      uFogColor: { value: new THREE.Color(0xcdd6c5) },
-      uFogDensity: { value: 0.0115 },
-      uMistGlow: { value: 0.65 },
-      uTime: { value: 0 },
-      uWindStrength: { value: 0.25 },
-      uCanopySnow: { value: 0 },
-      uWetness: { value: 0.08 },
-      uCloudTime: { value: 0 },
-      uCloudCoverage: { value: 0.48 },
-      uCloudStyle: { value: 0 },
-      uSunTransmission: { value: 1 },
-    },
-    vertexShader: /* glsl */ `
+export function createBarkDepthMaterial(): PbrMaterialHandle<THREE.MeshDepthMaterial> {
+  const uniforms: Record<string, THREE.IUniform> = {
+    uTime: { value: 0 },
+    uWindStrength: { value: 0.25 },
+  };
+
+  const material = new THREE.MeshDepthMaterial({
+    depthPacking: THREE.RGBADepthPacking,
+  });
+
+  material.customProgramCacheKey = () => 'topog-depth-bark-v1';
+  material.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms);
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        /* glsl */ `
+        #include <common>
+        uniform float uTime;
+        uniform float uWindStrength;
+        `
+      )
+      .replace(
+        '#include <begin_vertex>',
+        /* glsl */ `
+        #include <begin_vertex>
+        #ifdef USE_INSTANCING
+          vec4 barkInstPos = instanceMatrix * vec4(transformed, 1.0);
+          vec3 barkBasePos = instanceMatrix[3].xyz;
+          float barkH = max(barkInstPos.y - barkBasePos.y, 0.0);
+          float barkPhase = barkBasePos.x * 0.23 + barkBasePos.z * 0.19;
+          float barkSway = (barkH * barkH * 0.0014) * uWindStrength;
+          vec3 worldOffset = vec3(
+            barkSway * (sin(uTime * 1.25 + barkPhase) + 0.35 * sin(uTime * 2.6 + barkPhase * 1.7)),
+            0.0,
+            barkSway * 0.65 * cos(uTime * 1.05 + barkPhase * 1.3)
+          );
+          transformed += mat3(inverse(instanceMatrix)) * worldOffset;
+        #endif
+        `
+      );
+  };
+
+  return { material, uniforms };
+}
+
+function injectCanopyWindVertex(vertexShader: string): string {
+  return vertexShader
+    .replace(
+      '#include <common>',
+      /* glsl */ `
+      #include <common>
       uniform float uTime;
       uniform float uWindStrength;
-      varying vec3 vWorldPos;
-      varying vec3 vWorldNormal;
-      varying vec3 vColor;
-      varying vec2 vUv;
-      varying float vCrownHeight;
+      `
+    )
+    .replace(
+      '#include <begin_vertex>',
+      /* glsl */ `
+      #include <begin_vertex>
+      #ifdef USE_INSTANCING
+        vec4 canInstPos = instanceMatrix * vec4(transformed, 1.0);
+        vec3 canBasePos = instanceMatrix[3].xyz;
+      #else
+        vec4 canInstPos = vec4(transformed, 1.0);
+        vec3 canBasePos = vec3(0.0);
+      #endif
+      float canH = max(canInstPos.y - canBasePos.y, 0.0);
+      float canPhase = canBasePos.x * 0.23 + canBasePos.z * 0.19;
+      float canSway = (canH * canH * 0.0014) * uWindStrength;
+      vec3 canopyOffset = vec3(
+        canSway * (sin(uTime * 1.25 + canPhase) + 0.35 * sin(uTime * 2.6 + canPhase * 1.7)),
+        0.0,
+        canSway * 0.65 * cos(uTime * 1.05 + canPhase * 1.3)
+      );
+      float flutterPhase = canInstPos.x * 1.45 + canInstPos.z * 1.25 + canInstPos.y * 0.95;
+      float flutter = (0.018 + uWindStrength * 0.08) * (0.5 + 0.5 * uv.y);
+      canopyOffset.x += sin(uTime * 3.4 + flutterPhase) * flutter;
+      canopyOffset.y += cos(uTime * 3.9 + flutterPhase * 1.18) * flutter * 0.55;
+      #ifdef USE_INSTANCING
+        transformed += mat3(inverse(instanceMatrix)) * canopyOffset;
+      #else
+        transformed += canopyOffset;
+      #endif
+      `
+    );
+}
 
-      void main() {
-        #ifdef USE_INSTANCING
-          mat4 instMat = instanceMatrix;
-        #else
-          mat4 instMat = mat4(1.0);
-        #endif
+export function createPbrCanopyMaterial(leafClusterMap: THREE.Texture): PbrMaterialHandle {
+  const uniforms: Record<string, THREE.IUniform> = {
+    uSunDir: { value: new THREE.Vector3(0.45, 0.72, -0.52).normalize() },
+    uSunColor: { value: new THREE.Color(0xfff1d6) },
+    uTime: { value: 0 },
+    uWindStrength: { value: 0.25 },
+    uCanopySnow: { value: 0 },
+    uWetness: { value: 0.08 },
+    uCloudTime: { value: 0 },
+    uCloudCoverage: { value: 0.48 },
+    uCloudStyle: { value: 0 },
+    uSunTransmission: { value: 1 },
+  };
 
-        #ifdef USE_INSTANCING_COLOR
-          vColor = instanceColor;
-        #else
-          vColor = vec3(1.0);
-        #endif
+  const material = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: leafClusterMap,
+    alphaTest: 0.36,
+    side: THREE.DoubleSide,
+    roughness: 0.68,
+    metalness: 0.0,
+    envMapIntensity: 0.85,
+  });
 
-        vec4 instPos = instMat * vec4(position, 1.0);
-        vec3 basePos = instMat[3].xyz;
-        float h = max(instPos.y - basePos.y, 0.0);
-        float phase = basePos.x * 0.23 + basePos.z * 0.19;
+  material.customProgramCacheKey = () => 'topog-pbr-canopy-v1';
+  material.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms);
 
-        // Trunk-matched sway so foliage stays anchored on limbs
-        float swayAmt = (h * h * 0.0014) * uWindStrength;
-        instPos.x += swayAmt * (sin(uTime * 1.25 + phase) + 0.35 * sin(uTime * 2.6 + phase * 1.7));
-        instPos.z += swayAmt * 0.65 * cos(uTime * 1.05 + phase * 1.3);
-
-        // Airy leaf-card flutter
-        float flutterPhase = instPos.x * 1.45 + instPos.z * 1.25 + instPos.y * 0.95;
-        float flutter = (0.018 + uWindStrength * 0.08) * (0.5 + 0.5 * uv.y);
-        instPos.x += sin(uTime * 3.4 + flutterPhase) * flutter;
-        instPos.y += cos(uTime * 3.9 + flutterPhase * 1.18) * flutter * 0.55;
-
-        vec4 worldPos = modelMatrix * instPos;
-        vWorldPos = worldPos.xyz;
+    shader.vertexShader = injectCanopyWindVertex(shader.vertexShader)
+      .replace(
+        '#include <common>',
+        /* glsl */ `
+        #include <common>
+        varying vec3 vCustomWorldPos;
+        varying vec3 vCustomWorldNormal;
+        varying float vCrownHeight;
+        `
+      )
+      .replace(
+        '#include <project_vertex>',
+        /* glsl */ `
+        #include <project_vertex>
         vCrownHeight = clamp((position.y - 3.5) / 9.5, 0.0, 1.0);
+        vec4 cWorldPos = vec4(transformed, 1.0);
+        #ifdef USE_INSTANCING
+          cWorldPos = instanceMatrix * cWorldPos;
+        #endif
+        cWorldPos = modelMatrix * cWorldPos;
+        vCustomWorldPos = cWorldPos.xyz;
+        vec3 cObjNorm = vec3(normal);
+        #ifdef USE_INSTANCING
+          cObjNorm = mat3(instanceMatrix) * cObjNorm;
+        #endif
+        vCustomWorldNormal = normalize(mat3(modelMatrix) * cObjNorm);
+        `
+      );
 
-        mat3 instNormalMat = mat3(instMat);
-        vec3 instNorm = normalize(instNormalMat * normal);
-        vWorldNormal = normalize(mat3(modelMatrix) * instNorm);
-        vUv = uv;
-        gl_Position = projectionMatrix * viewMatrix * worldPos;
-      }
-    `,
-    fragmentShader: /* glsl */ `
-      uniform sampler2D uMap;
-      uniform vec3 uSunDir;
-      uniform vec3 uSunColor;
-      uniform vec3 uHemisphereSky;
-      uniform vec3 uHemisphereGround;
-      uniform vec3 uFogColor;
-      uniform float uFogDensity;
-      uniform float uMistGlow;
-      uniform float uCanopySnow;
-      uniform float uWetness;
-      uniform float uCloudTime;
-      uniform float uCloudCoverage;
-      uniform float uCloudStyle;
-      uniform float uSunTransmission;
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        /* glsl */ `
+        #include <common>
+        ${GLSL_NOISE_AND_FOG}
+        ${GLSL_NOISE_AND_COLSPACE}
+        uniform vec3 uSunDir;
+        uniform vec3 uSunColor;
+        uniform float uCanopySnow;
+        uniform float uWetness;
+        uniform float uCloudTime;
+        uniform float uCloudCoverage;
+        uniform float uCloudStyle;
+        uniform float uSunTransmission;
+        varying vec3 vCustomWorldPos;
+        varying vec3 vCustomWorldNormal;
+        varying float vCrownHeight;
+        `
+      )
+      .replace(
+        '#include <color_fragment>',
+        /* glsl */ `
+        #include <color_fragment>
+        vec3 foliageBase = diffuseColor.rgb;
+        vec3 canN = safeNormalize(vCustomWorldNormal, vec3(0.0, 1.0, 0.0));
+        if (!gl_FrontFacing) canN = -canN;
+        vec3 canSoftN = safeNormalize(mix(canN, vec3(0.0, 1.0, 0.0), 0.35), vec3(0.0, 1.0, 0.0));
 
-      varying vec3 vWorldPos;
-      varying vec3 vWorldNormal;
-      varying vec3 vColor;
-      varying vec2 vUv;
-      varying float vCrownHeight;
+        // Inner canopy ambient darkening -> bright sunward crown tips
+        foliageBase *= mix(0.62, 1.12, vCrownHeight * 0.55 + 0.45 * clamp(canSoftN.y * 0.5 + 0.5, 0.0, 1.0));
+        foliageBase *= mix(1.0, 0.78, clamp(uWetness, 0.0, 1.0));
 
-      ${GLSL_NOISE_AND_FOG}
+        float canSnowNoise = noise2(vCustomWorldPos.xz * 1.7 + vCustomWorldPos.y);
+        float canSnowCap = smoothstep(0.16, 0.72, canSoftN.y + (canSnowNoise - 0.5) * 0.25) * uCanopySnow;
+        canSnowCap = clamp(canSnowCap * (0.72 + 0.48 * vCrownHeight), 0.0, 0.92);
+        diffuseColor.rgb = mix(foliageBase, srgbToLinear(vec3(0.90, 0.95, 1.0)), canSnowCap);
+        `
+      )
+      .replace(
+        '#include <roughnessmap_fragment>',
+        /* glsl */ `
+        #include <roughnessmap_fragment>
+        roughnessFactor = mix(roughnessFactor, 0.28, clamp(uWetness, 0.0, 1.0) * (1.0 - canSnowCap));
+        roughnessFactor = mix(roughnessFactor, 0.60, canSnowCap);
+        `
+      )
+      .replace(
+        '#include <normal_fragment_begin>',
+        /* glsl */ `
+        #include <normal_fragment_begin>
+        normal = normalize(mix(normal, normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz), 0.28));
+        `
+      )
+      .replace(
+        '#include <emissivemap_fragment>',
+        /* glsl */ `
+        #include <emissivemap_fragment>
+        vec3 canSunL = safeNormalize(uSunDir, vec3(0.0, 1.0, 0.0));
+        vec3 canViewV = safeNormalize(cameraPosition - vCustomWorldPos, vec3(0.0, 0.0, 1.0));
+        float canCloudMask = computeCloudDirectMask(vCustomWorldPos.xz, canSunL, uCloudTime, uCloudCoverage, uCloudStyle, uSunTransmission);
+        float backLight = pow(clamp(dot(-canViewV, canSunL), 0.0, 1.0), 2.8) * max(canSunL.y + 0.2, 0.0) * (1.0 - canSnowCap * 0.85);
+        totalEmissiveRadiance += foliageBase * vec3(1.25, 1.48, 0.55) * uSunColor * backLight * canCloudMask * 0.55;
+        `
+      )
+      .replace(
+        '#include <lights_fragment_end>',
+        /* glsl */ `
+        #include <lights_fragment_end>
+        reflectedLight.directDiffuse *= canCloudMask;
+        reflectedLight.directSpecular *= canCloudMask;
+        reflectedLight.indirectDiffuse *= mix(1.24, 1.0, canCloudMask);
+        `
+      );
+  };
 
-      void main() {
-        vec4 tex = texture2D(uMap, vUv);
-        if (tex.a < 0.36) discard;
-
-        vec3 N = safeNormalize(vWorldNormal, vec3(0.0, 1.0, 0.0));
-        if (!gl_FrontFacing) N = -N;
-        // Soften normal toward upward canopy hemisphere to prevent flat card seams
-        vec3 softN = safeNormalize(mix(N, vec3(0.0, 1.0, 0.0), 0.35), vec3(0.0, 1.0, 0.0));
-        vec3 V = safeNormalize(cameraPosition - vWorldPos, vec3(0.0, 0.0, 1.0));
-        vec3 L = safeNormalize(uSunDir, vec3(0.0, 1.0, 0.0));
-
-        vec3 foliage = tex.rgb * vColor;
-        // Forest canopy self-shadowing: deeper shade on inner lower boughs, brighter tips
-        foliage *= mix(0.68, 1.12, vCrownHeight * 0.55 + 0.45 * clamp(softN.y * 0.5 + 0.5, 0.0, 1.0));
-        foliage *= mix(1.0, 0.78, clamp(uWetness, 0.0, 1.0));
-
-        // Upward-facing snow accumulation dusting leafy crowns
-        float snowNoise = noise2(vWorldPos.xz * 1.7 + vWorldPos.y);
-        float snowCap = smoothstep(0.16, 0.72, softN.y + (snowNoise - 0.5) * 0.25) * uCanopySnow;
-        snowCap = clamp(snowCap * (0.72 + 0.48 * vCrownHeight), 0.0, 0.92);
-        vec3 snowCol = vec3(0.91, 0.955, 1.0);
-        vec3 albedo = mix(foliage, snowCol, snowCap);
-
-        // Wrap diffuse + translucent sunlit leaf subsurface scattering
-        float wrapDiff = max((dot(softN, L) + 0.45) / 1.45, 0.0);
-        float backLight = pow(clamp(dot(-V, L), 0.0, 1.0), 2.8) * max(L.y + 0.2, 0.0) * (1.0 - snowCap * 0.85);
-        vec3 sssGlow = foliage * vec3(1.35, 1.55, 0.72) * backLight * 0.52;
-
-        float directMask = computeCloudDirectMask(vWorldPos.xz, L, uCloudTime, uCloudCoverage, uCloudStyle, uSunTransmission);
-        float ambientBoost = mix(1.24, 1.0, directMask);
-        float hemi = 0.5 + 0.5 * softN.y;
-        vec3 ambient = mix(uHemisphereGround, uHemisphereSky, hemi);
-
-        vec3 hv = L + V;
-        vec3 H = dot(hv, hv) > 1e-6 ? normalize(hv) : softN;
-        float wetSpec = pow(clamp(dot(softN, H), 0.0, 1.0), 26.0) * uWetness * (1.0 - snowCap) * 0.25;
-        float rim = pow(1.0 - clamp(dot(softN, V), 0.0, 1.0), 3.0) * 0.14;
-
-        vec3 lit = albedo * (ambient * 0.68 * ambientBoost + uSunColor * wrapDiff * directMask * 0.95)
-          + uSunColor * (sssGlow + wetSpec) * directMask
-          + uHemisphereSky * rim * (0.25 + 0.75 * snowCap);
-
-        lit = applyWoodlandMist(lit, vWorldPos, uFogColor, uFogDensity, L, uSunColor, uMistGlow);
-        gl_FragColor = vec4(lit, 1.0);
-      }
-    `,
-  });
+  return { material, uniforms };
 }
 
-export function createGrassMaterial(grassTuftMap: THREE.Texture): THREE.ShaderMaterial {
-  return new THREE.ShaderMaterial({
+export function createCanopyDepthMaterial(
+  leafClusterMap: THREE.Texture
+): PbrMaterialHandle<THREE.MeshDepthMaterial> {
+  const uniforms: Record<string, THREE.IUniform> = {
+    uTime: { value: 0 },
+    uWindStrength: { value: 0.25 },
+  };
+
+  const material = new THREE.MeshDepthMaterial({
+    depthPacking: THREE.RGBADepthPacking,
+    map: leafClusterMap,
+    alphaTest: 0.36,
     side: THREE.DoubleSide,
-    uniforms: {
-      uMap: { value: grassTuftMap },
-      uSunDir: { value: new THREE.Vector3(0.45, 0.72, -0.52).normalize() },
-      uSunColor: { value: new THREE.Color(0xfff1d6) },
-      uHemisphereSky: { value: new THREE.Color(0xcdd6c5) },
-      uHemisphereGround: { value: new THREE.Color(0x283520) },
-      uFogColor: { value: new THREE.Color(0xcdd6c5) },
-      uFogDensity: { value: 0.0115 },
-      uMistGlow: { value: 0.65 },
-      uDappleStrength: { value: 0.85 },
-      uTime: { value: 0 },
-      uWindStrength: { value: 0.25 },
-      uSnowCoverage: { value: 0 },
-      uSnowDepth: { value: 0 },
-      uWetness: { value: 0.08 },
-      uCloudTime: { value: 0 },
-      uCloudCoverage: { value: 0.48 },
-      uCloudStyle: { value: 0 },
-      uSunTransmission: { value: 1 },
-    },
-    vertexShader: /* glsl */ `
-      uniform float uTime;
-      uniform float uWindStrength;
-      uniform float uSnowCoverage;
-      uniform float uSnowDepth;
-
-      varying vec3 vWorldPos;
-      varying vec3 vWorldNormal;
-      varying vec3 vColor;
-      varying vec2 vUv;
-      varying float vLodFade;
-
-      void main() {
-        #ifdef USE_INSTANCING
-          mat4 instMat = instanceMatrix;
-        #else
-          mat4 instMat = mat4(1.0);
-        #endif
-
-        #ifdef USE_INSTANCING_COLOR
-          vColor = instanceColor;
-        #else
-          vColor = vec3(1.0);
-        #endif
-
-        vec3 baseWorld = (modelMatrix * vec4(instMat[3].xyz, 1.0)).xyz;
-        float camDist = length(cameraPosition - baseWorld);
-        float lodScale = 1.0 - smoothstep(46.0, 92.0, camDist);
-        vLodFade = lodScale;
-
-        vec3 localPos = position * lodScale;
-
-        float tipFactor = uv.y * uv.y;
-        float gustWave = sin(baseWorld.x * 0.16 + baseWorld.z * 0.11 - uTime * (1.7 + uWindStrength * 2.6)) * 0.5 + 0.5;
-        float rustle = sin(uTime * 4.2 + baseWorld.x * 1.9 + baseWorld.z * 2.3);
-        float windBend = (0.06 + uWindStrength * 0.42) * (0.35 + 0.65 * gustWave) + rustle * 0.04 * uWindStrength;
-
-        float snowDroop = uSnowCoverage * 0.45;
-        float buryDrop = min(uSnowDepth * 0.008, 0.24) * (1.0 - uv.y * 0.35);
-
-        vec4 instPos = instMat * vec4(localPos, 1.0);
-        instPos.x += windBend * tipFactor * lodScale;
-        instPos.z += (windBend * 0.55 + snowDroop * 0.25) * tipFactor * lodScale;
-        instPos.y -= (snowDroop * 0.26 * uv.y + buryDrop) * lodScale;
-
-        vec4 worldPos = modelMatrix * instPos;
-        vWorldPos = worldPos.xyz;
-
-        mat3 instNormalMat = mat3(instMat);
-        vWorldNormal = normalize(mat3(modelMatrix) * (instNormalMat * normal));
-        vUv = uv;
-        gl_Position = projectionMatrix * viewMatrix * worldPos;
-      }
-    `,
-    fragmentShader: /* glsl */ `
-      uniform sampler2D uMap;
-      uniform vec3 uSunDir;
-      uniform vec3 uSunColor;
-      uniform vec3 uHemisphereSky;
-      uniform vec3 uHemisphereGround;
-      uniform vec3 uFogColor;
-      uniform float uFogDensity;
-      uniform float uMistGlow;
-      uniform float uDappleStrength;
-      uniform float uTime;
-      uniform float uSnowCoverage;
-      uniform float uWetness;
-      uniform float uCloudTime;
-      uniform float uCloudCoverage;
-      uniform float uCloudStyle;
-      uniform float uSunTransmission;
-
-      varying vec3 vWorldPos;
-      varying vec3 vWorldNormal;
-      varying vec3 vColor;
-      varying vec2 vUv;
-      varying float vLodFade;
-
-      ${GLSL_NOISE_AND_FOG}
-
-      void main() {
-        if (vLodFade < 0.02) discard;
-
-        vec4 tex = texture2D(uMap, vUv);
-        if (tex.a < 0.28) discard;
-
-        vec3 N = safeNormalize(vWorldNormal, vec3(0.0, 1.0, 0.0));
-        if (!gl_FrontFacing) N = -N;
-        vec3 V = safeNormalize(cameraPosition - vWorldPos, vec3(0.0, 0.0, 1.0));
-        vec3 L = safeNormalize(uSunDir, vec3(0.0, 1.0, 0.0));
-
-        vec3 bladeCol = tex.rgb * vColor;
-        // Root ambient occlusion -> sunlit golden-green tips
-        bladeCol *= mix(0.48, 1.12, smoothstep(0.0, 0.68, vUv.y));
-        bladeCol *= mix(1.0, 0.74, clamp(uWetness, 0.0, 1.0));
-
-        float frostNoise = noise2(vWorldPos.xz * 1.4);
-        float snowCoat = smoothstep(0.08, 0.85, uSnowCoverage * (0.75 + 0.45 * vUv.y) - frostNoise * 0.22);
-        vec3 albedo = mix(bladeCol, vec3(0.91, 0.955, 1.0), snowCoat * 0.92);
-
-        float dapple = computeDappledSun(vWorldPos.xz, uTime, 0.0, uDappleStrength);
-        float directMask = computeCloudDirectMask(vWorldPos.xz, L, uCloudTime, uCloudCoverage, uCloudStyle, uSunTransmission);
-        float ambientBoost = mix(1.24, 1.0, directMask);
-        float wrapDiff = max((dot(N, L) + 0.45) / 1.45, 0.0);
-        float trans = pow(clamp(dot(-V, L), 0.0, 1.0), 2.5) * vUv.y * (1.0 - snowCoat * 0.8) * 0.48;
-        float hemi = 0.5 + 0.5 * N.y;
-        vec3 ambient = mix(uHemisphereGround, uHemisphereSky, hemi);
-
-        vec3 hv = L + V;
-        vec3 H = dot(hv, hv) > 1e-6 ? normalize(hv) : N;
-        float wetSpec = pow(clamp(dot(N, H), 0.0, 1.0), 24.0) * uWetness * (1.0 - snowCoat) * 0.28;
-
-        vec3 lit = albedo * (ambient * 0.66 * ambientBoost + uSunColor * wrapDiff * dapple * directMask * 0.98)
-          + uSunColor * (bladeCol * trans * dapple + wetSpec) * directMask;
-
-        lit = applyWoodlandMist(lit, vWorldPos, uFogColor, uFogDensity, L, uSunColor, uMistGlow);
-        gl_FragColor = vec4(lit, 1.0);
-      }
-    `,
   });
+
+  material.customProgramCacheKey = () => 'topog-depth-canopy-v1';
+  material.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms);
+    shader.vertexShader = injectCanopyWindVertex(shader.vertexShader);
+  };
+
+  return { material, uniforms };
 }
 
-export function createFernMaterial(fernFrondMap: THREE.Texture): THREE.ShaderMaterial {
-  return new THREE.ShaderMaterial({
+export function createPbrGrassMaterial(grassTuftMap: THREE.Texture): PbrMaterialHandle {
+  const uniforms: Record<string, THREE.IUniform> = {
+    uSunDir: { value: new THREE.Vector3(0.45, 0.72, -0.52).normalize() },
+    uSunColor: { value: new THREE.Color(0xfff1d6) },
+    uDappleStrength: { value: 0.85 },
+    uTime: { value: 0 },
+    uWindStrength: { value: 0.25 },
+    uSnowCoverage: { value: 0 },
+    uSnowDepth: { value: 0 },
+    uWetness: { value: 0.08 },
+    uCloudTime: { value: 0 },
+    uCloudCoverage: { value: 0.48 },
+    uCloudStyle: { value: 0 },
+    uSunTransmission: { value: 1 },
+  };
+
+  const material = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: grassTuftMap,
+    alphaTest: 0.28,
     side: THREE.DoubleSide,
-    uniforms: {
-      uMap: { value: fernFrondMap },
-      uSunDir: { value: new THREE.Vector3(0.45, 0.72, -0.52).normalize() },
-      uSunColor: { value: new THREE.Color(0xfff1d6) },
-      uHemisphereSky: { value: new THREE.Color(0xcdd6c5) },
-      uHemisphereGround: { value: new THREE.Color(0x283520) },
-      uFogColor: { value: new THREE.Color(0xcdd6c5) },
-      uFogDensity: { value: 0.0115 },
-      uMistGlow: { value: 0.65 },
-      uDappleStrength: { value: 0.85 },
-      uTime: { value: 0 },
-      uWindStrength: { value: 0.25 },
-      uSnowCoverage: { value: 0 },
-      uCanopySnow: { value: 0 },
-      uWetness: { value: 0.08 },
-      uCloudTime: { value: 0 },
-      uCloudCoverage: { value: 0.48 },
-      uCloudStyle: { value: 0 },
-      uSunTransmission: { value: 1 },
-    },
-    vertexShader: /* glsl */ `
-      uniform float uTime;
-      uniform float uWindStrength;
-      uniform float uSnowCoverage;
-
-      varying vec3 vWorldPos;
-      varying vec3 vWorldNormal;
-      varying vec3 vColor;
-      varying vec2 vUv;
-      varying float vLodFade;
-
-      void main() {
-        #ifdef USE_INSTANCING
-          mat4 instMat = instanceMatrix;
-        #else
-          mat4 instMat = mat4(1.0);
-        #endif
-
-        #ifdef USE_INSTANCING_COLOR
-          vColor = instanceColor;
-        #else
-          vColor = vec3(1.0);
-        #endif
-
-        vec3 baseWorld = (modelMatrix * vec4(instMat[3].xyz, 1.0)).xyz;
-        float camDist = length(cameraPosition - baseWorld);
-        vLodFade = 1.0 - smoothstep(64.0, 118.0, camDist);
-
-        vec3 localPos = position * vLodFade;
-        float tip = uv.y;
-        float phase = baseWorld.x * 0.75 + baseWorld.z * 0.92;
-        float sway = sin(uTime * 2.4 + phase) * (0.025 + uWindStrength * 0.14) * tip * tip;
-        localPos.y += sway * 0.55 - uSnowCoverage * 0.16 * tip;
-        localPos.x += sway;
-
-        vec4 worldPos = modelMatrix * instMat * vec4(localPos, 1.0);
-        vWorldPos = worldPos.xyz;
-        vWorldNormal = normalize(mat3(modelMatrix) * (mat3(instMat) * normal));
-        vUv = uv;
-        gl_Position = projectionMatrix * viewMatrix * worldPos;
-      }
-    `,
-    fragmentShader: /* glsl */ `
-      uniform sampler2D uMap;
-      uniform vec3 uSunDir;
-      uniform vec3 uSunColor;
-      uniform vec3 uHemisphereSky;
-      uniform vec3 uHemisphereGround;
-      uniform vec3 uFogColor;
-      uniform float uFogDensity;
-      uniform float uMistGlow;
-      uniform float uDappleStrength;
-      uniform float uTime;
-      uniform float uSnowCoverage;
-      uniform float uCanopySnow;
-      uniform float uWetness;
-      uniform float uCloudTime;
-      uniform float uCloudCoverage;
-      uniform float uCloudStyle;
-      uniform float uSunTransmission;
-
-      varying vec3 vWorldPos;
-      varying vec3 vWorldNormal;
-      varying vec3 vColor;
-      varying vec2 vUv;
-      varying float vLodFade;
-
-      ${GLSL_NOISE_AND_FOG}
-
-      void main() {
-        if (vLodFade < 0.02) discard;
-
-        vec4 tex = texture2D(uMap, vUv);
-        if (tex.a < 0.30) discard;
-
-        vec3 N = safeNormalize(vWorldNormal, vec3(0.0, 1.0, 0.0));
-        if (!gl_FrontFacing) N = -N;
-        vec3 V = safeNormalize(cameraPosition - vWorldPos, vec3(0.0, 0.0, 1.0));
-        vec3 L = safeNormalize(uSunDir, vec3(0.0, 1.0, 0.0));
-
-        vec3 fernCol = tex.rgb * vColor * mix(0.68, 1.14, vUv.y);
-        fernCol *= mix(1.0, 0.74, clamp(uWetness, 0.0, 1.0));
-
-        float snowAmt = max(uSnowCoverage, uCanopySnow * 0.9);
-        float snowMask = smoothstep(0.12, 0.75, snowAmt * (0.55 + 0.55 * max(N.y, 0.0)));
-        vec3 albedo = mix(fernCol, vec3(0.90, 0.95, 1.0), snowMask * 0.90);
-
-        float dapple = computeDappledSun(vWorldPos.xz, uTime, 0.0, uDappleStrength);
-        float directMask = computeCloudDirectMask(vWorldPos.xz, L, uCloudTime, uCloudCoverage, uCloudStyle, uSunTransmission);
-        float ambientBoost = mix(1.24, 1.0, directMask);
-        float wrapDiff = max((dot(N, L) + 0.42) / 1.42, 0.0);
-        float sss = pow(clamp(dot(-V, L), 0.0, 1.0), 2.4) * (1.0 - snowMask * 0.85) * 0.44;
-        float hemi = 0.5 + 0.5 * N.y;
-        vec3 ambient = mix(uHemisphereGround, uHemisphereSky, hemi);
-
-        vec3 hv = L + V;
-        vec3 H = dot(hv, hv) > 1e-6 ? normalize(hv) : N;
-        float wetSpec = pow(clamp(dot(N, H), 0.0, 1.0), 28.0) * uWetness * (1.0 - snowMask) * 0.25;
-
-        vec3 lit = albedo * (ambient * 0.66 * ambientBoost + uSunColor * wrapDiff * dapple * directMask * 0.96)
-          + uSunColor * (fernCol * sss * dapple + wetSpec) * directMask;
-
-        lit = applyWoodlandMist(lit, vWorldPos, uFogColor, uFogDensity, L, uSunColor, uMistGlow);
-        gl_FragColor = vec4(lit, 1.0);
-      }
-    `,
+    roughness: 0.62,
+    metalness: 0.0,
+    envMapIntensity: 0.82,
   });
+
+  material.customProgramCacheKey = () => 'topog-pbr-grass-v1';
+  material.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms);
+
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        /* glsl */ `
+        #include <common>
+        uniform float uTime;
+        uniform float uWindStrength;
+        uniform float uSnowCoverage;
+        uniform float uSnowDepth;
+        varying vec3 vCustomWorldPos;
+        varying float vLodFade;
+        `
+      )
+      .replace(
+        '#include <begin_vertex>',
+        /* glsl */ `
+        #include <begin_vertex>
+        #ifdef USE_INSTANCING
+          vec3 gBaseWorld = (modelMatrix * vec4(instanceMatrix[3].xyz, 1.0)).xyz;
+        #else
+          vec3 gBaseWorld = (modelMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+        #endif
+        float gCamDist = length(cameraPosition - gBaseWorld);
+        float gLodScale = 1.0 - smoothstep(46.0, 92.0, gCamDist);
+        vLodFade = gLodScale;
+        transformed *= gLodScale;
+
+        float gTip = uv.y * uv.y;
+        float gGust = sin(gBaseWorld.x * 0.16 + gBaseWorld.z * 0.11 - uTime * (1.7 + uWindStrength * 2.6)) * 0.5 + 0.5;
+        float gRustle = sin(uTime * 4.2 + gBaseWorld.x * 1.9 + gBaseWorld.z * 2.3);
+        float gBend = (0.06 + uWindStrength * 0.42) * (0.35 + 0.65 * gGust) + gRustle * 0.04 * uWindStrength;
+        float gSnowDroop = uSnowCoverage * 0.45;
+        float gBuryDrop = min(uSnowDepth * 0.008, 0.24) * (1.0 - uv.y * 0.35);
+
+        vec3 gWorldOffset = vec3(
+          gBend * gTip * gLodScale,
+          -(gSnowDroop * 0.26 * uv.y + gBuryDrop) * gLodScale,
+          (gBend * 0.55 + gSnowDroop * 0.25) * gTip * gLodScale
+        );
+        #ifdef USE_INSTANCING
+          transformed += mat3(inverse(instanceMatrix)) * gWorldOffset;
+        #else
+          transformed += gWorldOffset;
+        #endif
+        `
+      )
+      .replace(
+        '#include <project_vertex>',
+        /* glsl */ `
+        #include <project_vertex>
+        vec4 gWorldPos = vec4(transformed, 1.0);
+        #ifdef USE_INSTANCING
+          gWorldPos = instanceMatrix * gWorldPos;
+        #endif
+        gWorldPos = modelMatrix * gWorldPos;
+        vCustomWorldPos = gWorldPos.xyz;
+        `
+      );
+
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        /* glsl */ `
+        #include <common>
+        ${GLSL_NOISE_AND_FOG}
+        ${GLSL_NOISE_AND_COLSPACE}
+        uniform vec3 uSunDir;
+        uniform vec3 uSunColor;
+        uniform float uDappleStrength;
+        uniform float uTime;
+        uniform float uSnowCoverage;
+        uniform float uWetness;
+        uniform float uCloudTime;
+        uniform float uCloudCoverage;
+        uniform float uCloudStyle;
+        uniform float uSunTransmission;
+        varying vec3 vCustomWorldPos;
+        varying float vLodFade;
+        `
+      )
+      .replace(
+        '#include <alphatest_fragment>',
+        /* glsl */ `
+        if (vLodFade < 0.02) discard;
+        #include <alphatest_fragment>
+        `
+      )
+      .replace(
+        '#include <color_fragment>',
+        /* glsl */ `
+        #include <color_fragment>
+        vec3 bladeBase = diffuseColor.rgb;
+        bladeBase *= mix(0.45, 1.12, smoothstep(0.0, 0.68, vMapUv.y));
+        bladeBase *= mix(1.0, 0.74, clamp(uWetness, 0.0, 1.0));
+
+        float gFrostNoise = noise2(vCustomWorldPos.xz * 1.4);
+        float gSnowCoat = smoothstep(0.08, 0.85, uSnowCoverage * (0.75 + 0.45 * vMapUv.y) - gFrostNoise * 0.22);
+        diffuseColor.rgb = mix(bladeBase, srgbToLinear(vec3(0.90, 0.95, 1.0)), gSnowCoat * 0.92);
+        `
+      )
+      .replace(
+        '#include <roughnessmap_fragment>',
+        /* glsl */ `
+        #include <roughnessmap_fragment>
+        roughnessFactor = mix(roughnessFactor, 0.26, clamp(uWetness, 0.0, 1.0) * (1.0 - gSnowCoat));
+        roughnessFactor = mix(roughnessFactor, 0.58, gSnowCoat);
+        `
+      )
+      .replace(
+        '#include <emissivemap_fragment>',
+        /* glsl */ `
+        #include <emissivemap_fragment>
+        vec3 gSunL = safeNormalize(uSunDir, vec3(0.0, 1.0, 0.0));
+        vec3 gViewV = safeNormalize(cameraPosition - vCustomWorldPos, vec3(0.0, 0.0, 1.0));
+        float gDapple = computeDappledSun(vCustomWorldPos.xz, uTime, 0.0, uDappleStrength);
+        float gCloudMask = computeCloudDirectMask(vCustomWorldPos.xz, gSunL, uCloudTime, uCloudCoverage, uCloudStyle, uSunTransmission);
+        float gTrans = pow(clamp(dot(-gViewV, gSunL), 0.0, 1.0), 2.5) * vMapUv.y * (1.0 - gSnowCoat * 0.8) * 0.45;
+        totalEmissiveRadiance += bladeBase * uSunColor * gTrans * gDapple * gCloudMask;
+        `
+      )
+      .replace(
+        '#include <lights_fragment_end>',
+        /* glsl */ `
+        #include <lights_fragment_end>
+        reflectedLight.directDiffuse *= gDapple * gCloudMask;
+        reflectedLight.directSpecular *= gDapple * gCloudMask;
+        reflectedLight.indirectDiffuse *= mix(1.24, 1.0, gCloudMask);
+        `
+      );
+  };
+
+  return { material, uniforms };
 }
 
-export function createRockMaterial(): THREE.ShaderMaterial {
-  return new THREE.ShaderMaterial({
-    uniforms: {
-      uSunDir: { value: new THREE.Vector3(0.45, 0.72, -0.52).normalize() },
-      uSunColor: { value: new THREE.Color(0xfff1d6) },
-      uHemisphereSky: { value: new THREE.Color(0xcdd6c5) },
-      uHemisphereGround: { value: new THREE.Color(0x283520) },
-      uFogColor: { value: new THREE.Color(0xcdd6c5) },
-      uFogDensity: { value: 0.0115 },
-      uMistGlow: { value: 0.65 },
-      uDappleStrength: { value: 0.85 },
-      uTime: { value: 0 },
-      uSnowCoverage: { value: 0 },
-      uWetness: { value: 0.08 },
-      uCloudTime: { value: 0 },
-      uCloudCoverage: { value: 0.48 },
-      uCloudStyle: { value: 0 },
-      uSunTransmission: { value: 1 },
-    },
-    vertexShader: /* glsl */ `
-      varying vec3 vWorldPos;
-      varying vec3 vWorldNormal;
-      varying vec3 vColor;
+export function createPbrFernMaterial(fernFrondMap: THREE.Texture): PbrMaterialHandle {
+  const uniforms: Record<string, THREE.IUniform> = {
+    uSunDir: { value: new THREE.Vector3(0.45, 0.72, -0.52).normalize() },
+    uSunColor: { value: new THREE.Color(0xfff1d6) },
+    uDappleStrength: { value: 0.85 },
+    uTime: { value: 0 },
+    uWindStrength: { value: 0.25 },
+    uSnowCoverage: { value: 0 },
+    uCanopySnow: { value: 0 },
+    uWetness: { value: 0.08 },
+    uCloudTime: { value: 0 },
+    uCloudCoverage: { value: 0.48 },
+    uCloudStyle: { value: 0 },
+    uSunTransmission: { value: 1 },
+  };
 
-      void main() {
-        #ifdef USE_INSTANCING
-          mat4 instMat = instanceMatrix;
-        #else
-          mat4 instMat = mat4(1.0);
-        #endif
-
-        #ifdef USE_INSTANCING_COLOR
-          vColor = instanceColor;
-        #else
-          vColor = vec3(0.42, 0.44, 0.46);
-        #endif
-
-        vec4 worldPos = modelMatrix * instMat * vec4(position, 1.0);
-        vWorldPos = worldPos.xyz;
-        vWorldNormal = normalize(mat3(modelMatrix) * (mat3(instMat) * normal));
-        gl_Position = projectionMatrix * viewMatrix * worldPos;
-      }
-    `,
-    fragmentShader: /* glsl */ `
-      uniform vec3 uSunDir;
-      uniform vec3 uSunColor;
-      uniform vec3 uHemisphereSky;
-      uniform vec3 uHemisphereGround;
-      uniform vec3 uFogColor;
-      uniform float uFogDensity;
-      uniform float uMistGlow;
-      uniform float uDappleStrength;
-      uniform float uTime;
-      uniform float uSnowCoverage;
-      uniform float uWetness;
-      uniform float uCloudTime;
-      uniform float uCloudCoverage;
-      uniform float uCloudStyle;
-      uniform float uSunTransmission;
-
-      varying vec3 vWorldPos;
-      varying vec3 vWorldNormal;
-      varying vec3 vColor;
-
-      ${GLSL_NOISE_AND_FOG}
-
-      void main() {
-        vec3 N = safeNormalize(vWorldNormal, vec3(0.0, 1.0, 0.0));
-        vec3 V = safeNormalize(cameraPosition - vWorldPos, vec3(0.0, 0.0, 1.0));
-        vec3 L = safeNormalize(uSunDir, vec3(0.0, 1.0, 0.0));
-
-        float grain = fbm4(vWorldPos.xz * 2.5 + vWorldPos.y * 1.9);
-        float micro = noise2(vWorldPos.xz * 9.0 + vWorldPos.y * 7.0);
-        vec3 stone = vColor * (0.70 + 0.46 * grain + 0.14 * micro);
-
-        // Thick velvety woodland moss blanket on upward-facing boulder tops
-        float mossNoise = fbm4(vWorldPos.xz * 2.8 + vec2(4.2, 9.1));
-        float mossMask = smoothstep(0.28, 0.72, N.y + (mossNoise - 0.5) * 0.34);
-        vec3 mossShadow = vec3(0.14, 0.27, 0.11);
-        vec3 mossBright = vec3(0.29, 0.48, 0.18);
-        vec3 mossCol = mix(mossShadow, mossBright, 0.4 + 0.6 * mossNoise);
-        vec3 baseCol = mix(stone, mossCol, mossMask * 0.90);
-
-        baseCol *= mix(1.0, 0.56, clamp(uWetness, 0.0, 1.0));
-
-        // Thick snow cap as uSnowCoverage increases
-        float snowCap = smoothstep(0.22, 0.72, N.y + (grain - 0.5) * 0.18) * smoothstep(0.02, 0.72, uSnowCoverage);
-        vec3 albedo = mix(baseCol, vec3(0.93, 0.965, 1.0), snowCap);
-
-        float dapple = computeDappledSun(vWorldPos.xz, uTime, 0.12, uDappleStrength);
-        float directMask = computeCloudDirectMask(vWorldPos.xz, L, uCloudTime, uCloudCoverage, uCloudStyle, uSunTransmission);
-        float ambientBoost = mix(1.24, 1.0, directMask);
-        float NdotL = max(dot(N, L), 0.0);
-        float hemi = 0.5 + 0.5 * N.y;
-        vec3 ambient = mix(uHemisphereGround, uHemisphereSky, hemi);
-
-        vec3 hv = L + V;
-        vec3 H = dot(hv, hv) > 1e-6 ? normalize(hv) : N;
-        float wetSpec = pow(clamp(dot(N, H), 0.0, 1.0), 38.0) * uWetness * (1.0 - snowCap) * 0.45;
-        // Soft velvety sheen on moss edges
-        float mossRim = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 2.5) * mossMask * (1.0 - snowCap) * 0.18;
-
-        vec3 lit = albedo * (ambient * 0.64 * ambientBoost + uSunColor * NdotL * dapple * directMask * 0.98)
-          + uSunColor * wetSpec * dapple * directMask
-          + uSunColor * mossRim * 0.4 * directMask;
-
-        lit = applyWoodlandMist(lit, vWorldPos, uFogColor, uFogDensity, L, uSunColor, uMistGlow);
-        gl_FragColor = vec4(lit, 1.0);
-      }
-    `,
+  const material = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: fernFrondMap,
+    alphaTest: 0.30,
+    side: THREE.DoubleSide,
+    roughness: 0.65,
+    metalness: 0.0,
+    envMapIntensity: 0.82,
   });
+
+  material.customProgramCacheKey = () => 'topog-pbr-fern-v1';
+  material.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms);
+
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        /* glsl */ `
+        #include <common>
+        uniform float uTime;
+        uniform float uWindStrength;
+        uniform float uSnowCoverage;
+        varying vec3 vCustomWorldPos;
+        varying vec3 vCustomWorldNormal;
+        varying float vLodFade;
+        `
+      )
+      .replace(
+        '#include <begin_vertex>',
+        /* glsl */ `
+        #include <begin_vertex>
+        #ifdef USE_INSTANCING
+          vec3 fBaseWorld = (modelMatrix * vec4(instanceMatrix[3].xyz, 1.0)).xyz;
+        #else
+          vec3 fBaseWorld = (modelMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+        #endif
+        float fCamDist = length(cameraPosition - fBaseWorld);
+        vLodFade = 1.0 - smoothstep(64.0, 118.0, fCamDist);
+        transformed *= vLodFade;
+
+        float fTip = uv.y;
+        float fPhase = fBaseWorld.x * 0.75 + fBaseWorld.z * 0.92;
+        float fSway = sin(uTime * 2.4 + fPhase) * (0.025 + uWindStrength * 0.14) * fTip * fTip;
+        transformed.y += fSway * 0.55 - uSnowCoverage * 0.16 * fTip;
+        transformed.x += fSway;
+        `
+      )
+      .replace(
+        '#include <project_vertex>',
+        /* glsl */ `
+        #include <project_vertex>
+        vec4 fWorldPos = vec4(transformed, 1.0);
+        #ifdef USE_INSTANCING
+          fWorldPos = instanceMatrix * fWorldPos;
+        #endif
+        fWorldPos = modelMatrix * fWorldPos;
+        vCustomWorldPos = fWorldPos.xyz;
+        vec3 fObjNorm = vec3(normal);
+        #ifdef USE_INSTANCING
+          fObjNorm = mat3(instanceMatrix) * fObjNorm;
+        #endif
+        vCustomWorldNormal = normalize(mat3(modelMatrix) * fObjNorm);
+        `
+      );
+
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        /* glsl */ `
+        #include <common>
+        ${GLSL_NOISE_AND_FOG}
+        ${GLSL_NOISE_AND_COLSPACE}
+        uniform vec3 uSunDir;
+        uniform vec3 uSunColor;
+        uniform float uDappleStrength;
+        uniform float uTime;
+        uniform float uSnowCoverage;
+        uniform float uCanopySnow;
+        uniform float uWetness;
+        uniform float uCloudTime;
+        uniform float uCloudCoverage;
+        uniform float uCloudStyle;
+        uniform float uSunTransmission;
+        varying vec3 vCustomWorldPos;
+        varying vec3 vCustomWorldNormal;
+        varying float vLodFade;
+        `
+      )
+      .replace(
+        '#include <alphatest_fragment>',
+        /* glsl */ `
+        if (vLodFade < 0.02) discard;
+        #include <alphatest_fragment>
+        `
+      )
+      .replace(
+        '#include <color_fragment>',
+        /* glsl */ `
+        #include <color_fragment>
+        vec3 fernBase = diffuseColor.rgb * mix(0.68, 1.14, vMapUv.y);
+        fernBase *= mix(1.0, 0.74, clamp(uWetness, 0.0, 1.0));
+        vec3 fGeoN = safeNormalize(vCustomWorldNormal, vec3(0.0, 1.0, 0.0));
+        if (!gl_FrontFacing) fGeoN = -fGeoN;
+
+        float fSnowAmt = max(uSnowCoverage, uCanopySnow * 0.9);
+        float fSnowMask = smoothstep(0.12, 0.75, fSnowAmt * (0.55 + 0.55 * max(fGeoN.y, 0.0)));
+        diffuseColor.rgb = mix(fernBase, srgbToLinear(vec3(0.90, 0.95, 1.0)), fSnowMask * 0.90);
+        `
+      )
+      .replace(
+        '#include <roughnessmap_fragment>',
+        /* glsl */ `
+        #include <roughnessmap_fragment>
+        roughnessFactor = mix(roughnessFactor, 0.28, clamp(uWetness, 0.0, 1.0) * (1.0 - fSnowMask));
+        roughnessFactor = mix(roughnessFactor, 0.58, fSnowMask);
+        `
+      )
+      .replace(
+        '#include <emissivemap_fragment>',
+        /* glsl */ `
+        #include <emissivemap_fragment>
+        vec3 fSunL = safeNormalize(uSunDir, vec3(0.0, 1.0, 0.0));
+        vec3 fViewV = safeNormalize(cameraPosition - vCustomWorldPos, vec3(0.0, 0.0, 1.0));
+        float fDapple = computeDappledSun(vCustomWorldPos.xz, uTime, 0.0, uDappleStrength);
+        float fCloudMask = computeCloudDirectMask(vCustomWorldPos.xz, fSunL, uCloudTime, uCloudCoverage, uCloudStyle, uSunTransmission);
+        float fSss = pow(clamp(dot(-fViewV, fSunL), 0.0, 1.0), 2.4) * (1.0 - fSnowMask * 0.85) * 0.42;
+        totalEmissiveRadiance += fernBase * uSunColor * fSss * fDapple * fCloudMask;
+        `
+      )
+      .replace(
+        '#include <lights_fragment_end>',
+        /* glsl */ `
+        #include <lights_fragment_end>
+        reflectedLight.directDiffuse *= fDapple * fCloudMask;
+        reflectedLight.directSpecular *= fDapple * fCloudMask;
+        reflectedLight.indirectDiffuse *= mix(1.24, 1.0, fCloudMask);
+        `
+      );
+  };
+
+  return { material, uniforms };
+}
+
+export function createPbrRockMaterial(
+  rockMap: THREE.Texture,
+  rockNormalMap: THREE.Texture
+): PbrMaterialHandle {
+  rockMap.repeat.set(2, 2);
+  rockNormalMap.repeat.set(2, 2);
+
+  const uniforms: Record<string, THREE.IUniform> = {
+    uSunDir: { value: new THREE.Vector3(0.45, 0.72, -0.52).normalize() },
+    uDappleStrength: { value: 0.85 },
+    uTime: { value: 0 },
+    uSnowCoverage: { value: 0 },
+    uWetness: { value: 0.08 },
+    uCloudTime: { value: 0 },
+    uCloudCoverage: { value: 0.48 },
+    uCloudStyle: { value: 0 },
+    uSunTransmission: { value: 1 },
+  };
+
+  const material = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: rockMap,
+    normalMap: rockNormalMap,
+    normalScale: new THREE.Vector2(1.5, 1.5),
+    roughness: 0.86,
+    metalness: 0.0,
+    envMapIntensity: 0.78,
+  });
+
+  material.customProgramCacheKey = () => 'topog-pbr-rock-v1';
+  material.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms);
+
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        /* glsl */ `
+        #include <common>
+        varying vec3 vCustomWorldPos;
+        varying vec3 vCustomWorldNormal;
+        `
+      )
+      .replace(
+        '#include <project_vertex>',
+        /* glsl */ `
+        #include <project_vertex>
+        vec4 rWorldPos = vec4(transformed, 1.0);
+        #ifdef USE_INSTANCING
+          rWorldPos = instanceMatrix * rWorldPos;
+        #endif
+        rWorldPos = modelMatrix * rWorldPos;
+        vCustomWorldPos = rWorldPos.xyz;
+        vec3 rObjNorm = vec3(normal);
+        #ifdef USE_INSTANCING
+          rObjNorm = mat3(instanceMatrix) * rObjNorm;
+        #endif
+        vCustomWorldNormal = normalize(mat3(modelMatrix) * rObjNorm);
+        `
+      );
+
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        /* glsl */ `
+        #include <common>
+        ${GLSL_NOISE_AND_FOG}
+        ${GLSL_NOISE_AND_COLSPACE}
+        uniform vec3 uSunDir;
+        uniform float uDappleStrength;
+        uniform float uTime;
+        uniform float uSnowCoverage;
+        uniform float uWetness;
+        uniform float uCloudTime;
+        uniform float uCloudCoverage;
+        uniform float uCloudStyle;
+        uniform float uSunTransmission;
+        varying vec3 vCustomWorldPos;
+        varying vec3 vCustomWorldNormal;
+        `
+      )
+      .replace(
+        '#include <color_fragment>',
+        /* glsl */ `
+        #include <color_fragment>
+        vec3 rGeoN = safeNormalize(vCustomWorldNormal, vec3(0.0, 1.0, 0.0));
+        float rGrain = fbm4(vCustomWorldPos.xz * 2.5 + vCustomWorldPos.y * 1.9);
+        vec3 stoneCol = diffuseColor.rgb * (0.82 + 0.34 * rGrain);
+
+        // Velvety forest moss pillow on boulder top faces
+        float rMossNoise = fbm4(vCustomWorldPos.xz * 2.8 + vec2(4.2, 9.1));
+        float rMossMask = smoothstep(0.28, 0.72, rGeoN.y + (rMossNoise - 0.5) * 0.34);
+        vec3 rMossCol = mix(
+          srgbToLinear(vec3(0.13, 0.25, 0.10)),
+          srgbToLinear(vec3(0.27, 0.45, 0.17)),
+          0.4 + 0.6 * rMossNoise
+        );
+        vec3 rockBase = mix(stoneCol, rMossCol, rMossMask * 0.90);
+        rockBase *= mix(1.0, 0.56, clamp(uWetness, 0.0, 1.0));
+
+        float rSnowCap = smoothstep(0.22, 0.72, rGeoN.y + (rGrain - 0.5) * 0.18) * smoothstep(0.02, 0.72, uSnowCoverage);
+        diffuseColor.rgb = mix(rockBase, srgbToLinear(vec3(0.93, 0.965, 1.0)), rSnowCap);
+        `
+      )
+      .replace(
+        '#include <roughnessmap_fragment>',
+        /* glsl */ `
+        #include <roughnessmap_fragment>
+        roughnessFactor = mix(roughnessFactor, 0.92, rMossMask * 0.85 * (1.0 - rSnowCap));
+        roughnessFactor = mix(roughnessFactor, 0.20, clamp(uWetness, 0.0, 1.0) * (1.0 - rSnowCap));
+        roughnessFactor = mix(roughnessFactor, 0.58, rSnowCap);
+        `
+      )
+      .replace(
+        '#include <lights_fragment_end>',
+        /* glsl */ `
+        #include <lights_fragment_end>
+        vec3 rSunL = safeNormalize(uSunDir, vec3(0.0, 1.0, 0.0));
+        float rDapple = computeDappledSun(vCustomWorldPos.xz, uTime, 0.12, uDappleStrength);
+        float rCloudMask = computeCloudDirectMask(vCustomWorldPos.xz, rSunL, uCloudTime, uCloudCoverage, uCloudStyle, uSunTransmission);
+        reflectedLight.directDiffuse *= rDapple * rCloudMask;
+        reflectedLight.directSpecular *= rDapple * rCloudMask;
+        reflectedLight.indirectDiffuse *= mix(1.24, 1.0, rCloudMask);
+        `
+      );
+  };
+
+  return { material, uniforms };
 }
 
 export function createVolumetricMistMaterial(): THREE.ShaderMaterial {

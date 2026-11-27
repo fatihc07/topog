@@ -2,10 +2,19 @@ import * as THREE from 'three';
 
 export interface ForestTextureSet {
   barkMap: THREE.CanvasTexture;
+  oakBarkMap: THREE.CanvasTexture;
+  oakBarkNormalMap: THREE.CanvasTexture;
+  oakBarkRoughnessMap: THREE.CanvasTexture;
+  birchBarkMap: THREE.CanvasTexture;
+  birchBarkNormalMap: THREE.CanvasTexture;
   leafClusterMap: THREE.CanvasTexture;
   fernFrondMap: THREE.CanvasTexture;
   grassTuftMap: THREE.CanvasTexture;
   groundDetailMap: THREE.CanvasTexture;
+  groundNormalMap: THREE.CanvasTexture;
+  groundRoughnessMap: THREE.CanvasTexture;
+  rockMap: THREE.CanvasTexture;
+  rockNormalMap: THREE.CanvasTexture;
   dispose: () => void;
 }
 
@@ -102,7 +111,8 @@ function makeCanvas(width: number, height: number): {
 
 function configureTexture(
   canvas: HTMLCanvasElement,
-  wrapMode: THREE.Wrapping
+  wrapMode: THREE.Wrapping,
+  colorSpace: THREE.ColorSpace = THREE.SRGBColorSpace
 ): THREE.CanvasTexture {
   const tex = new THREE.CanvasTexture(canvas);
   tex.wrapS = wrapMode;
@@ -110,9 +120,69 @@ function configureTexture(
   tex.generateMipmaps = true;
   tex.minFilter = THREE.LinearMipmapLinearFilter;
   tex.magFilter = THREE.LinearFilter;
-  tex.colorSpace = THREE.NoColorSpace;
+  tex.colorSpace = colorSpace;
   tex.needsUpdate = true;
   return tex;
+}
+
+/**
+ * Generates a tangent-space normal map from a grayscale height canvas using a 3x3 Sobel filter.
+ */
+function heightCanvasToNormalTexture(
+  heightCanvas: HTMLCanvasElement,
+  strength: number,
+  wrapMode: THREE.Wrapping
+): THREE.CanvasTexture {
+  const w = heightCanvas.width;
+  const h = heightCanvas.height;
+  const srcCtx = heightCanvas.getContext('2d');
+  if (!srcCtx) {
+    throw new Error('Failed to get 2D context for normal map heightfield');
+  }
+  const src = srcCtx.getImageData(0, 0, w, h).data;
+  const { canvas: outCanvas, ctx: outCtx } = makeCanvas(w, h);
+  const outImg = outCtx.createImageData(w, h);
+  const out = outImg.data;
+  const wrap = wrapMode === THREE.RepeatWrapping;
+
+  const sampleH = (x: number, y: number): number => {
+    const cx = wrap ? ((x % w) + w) % w : clamp(x, 0, w - 1);
+    const cy = wrap ? ((y % h) + h) % h : clamp(y, 0, h - 1);
+    return src[(cy * w + cx) * 4] / 255;
+  };
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const tl = sampleH(x - 1, y - 1);
+      const t = sampleH(x, y - 1);
+      const tr = sampleH(x + 1, y - 1);
+      const l = sampleH(x - 1, y);
+      const r = sampleH(x + 1, y);
+      const bl = sampleH(x - 1, y + 1);
+      const b = sampleH(x, y + 1);
+      const br = sampleH(x + 1, y + 1);
+
+      const dx = tr + 2 * r + br - (tl + 2 * l + bl);
+      const dy = bl + 2 * b + br - (tl + 2 * t + tr);
+
+      let nx = -dx * strength;
+      let ny = -dy * strength;
+      let nz = 1.0;
+      const invLen = 1 / Math.sqrt(nx * nx + ny * ny + nz * nz);
+      nx *= invLen;
+      ny *= invLen;
+      nz *= invLen;
+
+      const idx = (y * w + x) * 4;
+      out[idx] = clamp(Math.round((nx * 0.5 + 0.5) * 255), 0, 255);
+      out[idx + 1] = clamp(Math.round((ny * 0.5 + 0.5) * 255), 0, 255);
+      out[idx + 2] = clamp(Math.round((nz * 0.5 + 0.5) * 255), 0, 255);
+      out[idx + 3] = 255;
+    }
+  }
+
+  outCtx.putImageData(outImg, 0, 0);
+  return configureTexture(outCanvas, wrapMode, THREE.NoColorSpace);
 }
 
 /**
@@ -179,11 +249,21 @@ function drawWrapped(
   }
 }
 
-function createBarkTexture(): THREE.CanvasTexture {
+function createOakBarkTextures(): {
+  map: THREE.CanvasTexture;
+  normalMap: THREE.CanvasTexture;
+  roughnessMap: THREE.CanvasTexture;
+} {
   const size = 512;
   const { canvas, ctx } = makeCanvas(size, size);
+  const { canvas: heightCanvas, ctx: heightCtx } = makeCanvas(size, size);
+  const { canvas: roughCanvas, ctx: roughCtx } = makeCanvas(size, size);
   const img = ctx.createImageData(size, size);
+  const heightImg = heightCtx.createImageData(size, size);
+  const roughImg = roughCtx.createImageData(size, size);
   const data = img.data;
+  const hData = heightImg.data;
+  const rData = roughImg.data;
 
   const twoPi = Math.PI * 2;
 
@@ -208,62 +288,150 @@ function createBarkTexture(): THREE.CanvasTexture {
       const ridgeHeight = clamp(plateA * 0.62 + plateB * 0.24 + fineFiber * 0.22 - 0.08, 0, 1);
       const crevice = 1 - smoothstep(0.06, 0.36, ridgeHeight);
 
-      // Subtle horizontal lenticels (birch/beech bark markings).
+      // Subtle horizontal lenticels (beech/oak bark markings).
       const lenticelBand = periodicFbm(u, v, 6, 36, 2, 31.2);
       const lenticelDash = Math.sin(u * twoPi * 14 + lenticelBand * 5.0);
       const lenticelMask =
         smoothstep(0.66, 0.84, lenticelBand) * smoothstep(0.4, 0.92, lenticelDash) * (1 - crevice);
 
-      // Base warm grey-brown oak/birch bark palette.
-      let r = lerp(40, 128, ridgeHeight);
-      let g = lerp(31, 114, ridgeHeight);
-      let b = lerp(24, 98, ridgeHeight);
+      // Base warm dark-brown oak/beech bark palette matching photoreal woodland look.
+      let r = lerp(34, 106, ridgeHeight);
+      let g = lerp(26, 92, ridgeHeight);
+      let b = lerp(20, 76, ridgeHeight);
 
-      // Warm chestnut mid-tone modulation.
       const warmPatch = periodicFbm(u + 0.21, v + 0.47, 5, 5, 3, 41.8);
-      r += (warmPatch - 0.5) * 22;
-      g += (warmPatch - 0.5) * 14;
+      r += (warmPatch - 0.5) * 18;
+      g += (warmPatch - 0.5) * 12;
       b += (warmPatch - 0.5) * 6;
 
       // Deep dark crevices.
-      r = lerp(r, 25, crevice * 0.88);
-      g = lerp(g, 19, crevice * 0.88);
-      b = lerp(b, 15, crevice * 0.88);
+      r = lerp(r, 18, crevice * 0.90);
+      g = lerp(g, 14, crevice * 0.90);
+      b = lerp(b, 11, crevice * 0.90);
 
-      // Darken & slightly silver lenticel streaks.
-      r = lerp(r, 46, lenticelMask * 0.45);
-      g = lerp(g, 38, lenticelMask * 0.45);
-      b = lerp(b, 32, lenticelMask * 0.45);
+      r = lerp(r, 40, lenticelMask * 0.42);
+      g = lerp(g, 33, lenticelMask * 0.42);
+      b = lerp(b, 27, lenticelMask * 0.42);
 
       // Velvety woodland green moss nestled in crevices and sheltered patches.
       const mossField = periodicFbm(u + 0.37, v + 0.63, 4, 4, 3, 55.1);
       const mossMicro = periodicFbm(u, v, 24, 24, 2, 61.3);
-      const mossMask = smoothstep(0.57, 0.78, mossField + crevice * 0.16 + (mossMicro - 0.5) * 0.14);
-      const mossR = lerp(42, 74, mossMicro);
-      const mossG = lerp(74, 108, mossMicro);
-      const mossB = lerp(28, 44, mossMicro);
-      r = lerp(r, mossR, mossMask * 0.85);
-      g = lerp(g, mossG, mossMask * 0.85);
-      b = lerp(b, mossB, mossMask * 0.85);
+      const mossMask = smoothstep(0.56, 0.77, mossField + crevice * 0.16 + (mossMicro - 0.5) * 0.14);
+      r = lerp(r, lerp(38, 68, mossMicro), mossMask * 0.85);
+      g = lerp(g, lerp(68, 102, mossMicro), mossMask * 0.85);
+      b = lerp(b, lerp(24, 40, mossMicro), mossMask * 0.85);
 
-      // Pale sage-grey lichen flecks on higher outer bark ridges.
+      // Pale sage-grey lichen flecks on outer bark ridges.
       const lichenField = periodicFbm(u + 0.14, v + 0.82, 16, 16, 3, 73.9);
       const lichenMask =
-        smoothstep(0.73, 0.85, lichenField) * smoothstep(0.45, 0.75, ridgeHeight) * (1 - mossMask * 0.7);
-      r = lerp(r, 158, lichenMask * 0.72);
-      g = lerp(g, 168, lichenMask * 0.72);
-      b = lerp(b, 142, lichenMask * 0.72);
+        smoothstep(0.74, 0.86, lichenField) * smoothstep(0.45, 0.75, ridgeHeight) * (1 - mossMask * 0.7);
+      r = lerp(r, 142, lichenMask * 0.68);
+      g = lerp(g, 152, lichenMask * 0.68);
+      b = lerp(b, 128, lichenMask * 0.68);
+
+      const hByte = clamp(Math.round((ridgeHeight * (1 - crevice * 0.75) + mossMask * 0.12) * 255), 0, 255);
+      const roughByte = clamp(Math.round(lerp(0.96, 0.74, ridgeHeight * (1 - mossMask * 0.5)) * 255), 0, 255);
 
       const idx = (y * size + x) * 4;
       data[idx] = clamp(Math.round(r), 0, 255);
       data[idx + 1] = clamp(Math.round(g), 0, 255);
       data[idx + 2] = clamp(Math.round(b), 0, 255);
       data[idx + 3] = 255;
+
+      hData[idx] = hByte;
+      hData[idx + 1] = hByte;
+      hData[idx + 2] = hByte;
+      hData[idx + 3] = 255;
+
+      rData[idx] = roughByte;
+      rData[idx + 1] = roughByte;
+      rData[idx + 2] = roughByte;
+      rData[idx + 3] = 255;
     }
   }
 
   ctx.putImageData(img, 0, 0);
-  return configureTexture(canvas, THREE.RepeatWrapping);
+  heightCtx.putImageData(heightImg, 0, 0);
+  roughCtx.putImageData(roughImg, 0, 0);
+
+  return {
+    map: configureTexture(canvas, THREE.RepeatWrapping, THREE.SRGBColorSpace),
+    normalMap: heightCanvasToNormalTexture(heightCanvas, 3.4, THREE.RepeatWrapping),
+    roughnessMap: configureTexture(roughCanvas, THREE.RepeatWrapping, THREE.NoColorSpace),
+  };
+}
+
+function createBirchBarkTextures(): {
+  map: THREE.CanvasTexture;
+  normalMap: THREE.CanvasTexture;
+} {
+  const size = 512;
+  const { canvas, ctx } = makeCanvas(size, size);
+  const { canvas: heightCanvas, ctx: heightCtx } = makeCanvas(size, size);
+  const img = ctx.createImageData(size, size);
+  const heightImg = heightCtx.createImageData(size, size);
+  const data = img.data;
+  const hData = heightImg.data;
+  const twoPi = Math.PI * 2;
+
+  for (let y = 0; y < size; y++) {
+    const v = y / size;
+    for (let x = 0; x < size; x++) {
+      const u = x / size;
+
+      const paperyBand = periodicFbm(u, v, 3, 28, 3, 108.4);
+      const fineGrain = periodicFbm(u, v, 24, 48, 2, 121.9);
+      const peelingEdge = smoothstep(0.42, 0.56, paperyBand) - smoothstep(0.56, 0.72, paperyBand);
+
+      // Characteristic dark horizontal charcoal lenticel dashes & knot scars.
+      const lenticelZone = periodicFbm(u + 0.12, v, 5, 44, 2, 134.1);
+      const lenticelWave = Math.sin(u * twoPi * 10 + periodicFbm(u, v, 4, 24, 2, 145.6) * 5.2);
+      const lenticelMask =
+        smoothstep(0.56, 0.76, lenticelZone) * smoothstep(0.25, 0.85, lenticelWave);
+
+      const scarField = periodicFbm(u, v, 4, 8, 3, 162.3);
+      const scarMask = smoothstep(0.74, 0.86, scarField) * smoothstep(0.38, 0.72, fineGrain);
+
+      // Silver-white birch epidermis with warm cream undertone.
+      let r = lerp(188, 228, paperyBand * 0.65 + fineGrain * 0.35);
+      let g = lerp(186, 224, paperyBand * 0.65 + fineGrain * 0.35);
+      let b = lerp(178, 215, paperyBand * 0.65 + fineGrain * 0.35);
+
+      r -= peelingEdge * 18;
+      g -= peelingEdge * 20;
+      b -= peelingEdge * 24;
+
+      r = lerp(r, 42, lenticelMask * 0.86);
+      g = lerp(g, 38, lenticelMask * 0.86);
+      b = lerp(b, 35, lenticelMask * 0.86);
+
+      r = lerp(r, 34, scarMask * 0.88);
+      g = lerp(g, 30, scarMask * 0.88);
+      b = lerp(b, 26, scarMask * 0.88);
+
+      const hVal = clamp(0.68 + paperyBand * 0.22 - lenticelMask * 0.28 - scarMask * 0.42, 0, 1);
+      const hByte = clamp(Math.round(hVal * 255), 0, 255);
+
+      const idx = (y * size + x) * 4;
+      data[idx] = clamp(Math.round(r), 0, 255);
+      data[idx + 1] = clamp(Math.round(g), 0, 255);
+      data[idx + 2] = clamp(Math.round(b), 0, 255);
+      data[idx + 3] = 255;
+
+      hData[idx] = hByte;
+      hData[idx + 1] = hByte;
+      hData[idx + 2] = hByte;
+      hData[idx + 3] = 255;
+    }
+  }
+
+  ctx.putImageData(img, 0, 0);
+  heightCtx.putImageData(heightImg, 0, 0);
+
+  return {
+    map: configureTexture(canvas, THREE.RepeatWrapping, THREE.SRGBColorSpace),
+    normalMap: heightCanvasToNormalTexture(heightCanvas, 2.2, THREE.RepeatWrapping),
+  };
 }
 
 function drawDeciduousLeaf(
@@ -678,11 +846,21 @@ function createGrassTuftTexture(): THREE.CanvasTexture {
   return configureTexture(canvas, THREE.ClampToEdgeWrapping);
 }
 
-function createGroundDetailTexture(): THREE.CanvasTexture {
+function createGroundDetailTextures(): {
+  map: THREE.CanvasTexture;
+  normalMap: THREE.CanvasTexture;
+  roughnessMap: THREE.CanvasTexture;
+} {
   const size = 512;
   const { canvas, ctx } = makeCanvas(size, size);
+  const { canvas: heightCanvas, ctx: heightCtx } = makeCanvas(size, size);
+  const { canvas: roughCanvas, ctx: roughCtx } = makeCanvas(size, size);
   const img = ctx.createImageData(size, size);
+  const heightImg = heightCtx.createImageData(size, size);
+  const roughImg = roughCtx.createImageData(size, size);
   const data = img.data;
+  const hData = heightImg.data;
+  const rData = roughImg.data;
 
   // Step 1: seamless per-pixel forest humus grain & damp mossy speckles.
   for (let y = 0; y < size; y++) {
@@ -700,39 +878,44 @@ function createGroundDetailTexture(): THREE.CanvasTexture {
       let g = lerp(37, 68, macro * 0.65 + grain * 0.35);
       let b = lerp(24, 44, macro * 0.65 + grain * 0.35);
 
-      // Fine mineral grit flecks.
       const gritBoost = (grit - 0.5) * 26;
       r += gritBoost;
       g += gritBoost * 0.92;
       b += gritBoost * 0.78;
 
-      // Damp mossy ground speckles.
       const mossMask = smoothstep(0.55, 0.77, mossPatch + (grain - 0.5) * 0.16);
       r = lerp(r, lerp(38, 66, grain), mossMask * 0.75);
       g = lerp(g, lerp(64, 96, grain), mossMask * 0.75);
       b = lerp(b, lerp(24, 38, grain), mossMask * 0.75);
+
+      const hVal = clamp(macro * 0.45 + grain * 0.38 + grit * 0.17, 0, 1);
+      const hByte = clamp(Math.round(hVal * 255), 0, 255);
+      const roughVal = lerp(0.95, 0.76, mossMask * 0.4 + grain * 0.35);
+      const roughByte = clamp(Math.round(roughVal * 255), 0, 255);
 
       const idx = (y * size + x) * 4;
       data[idx] = clamp(Math.round(r), 0, 255);
       data[idx + 1] = clamp(Math.round(g), 0, 255);
       data[idx + 2] = clamp(Math.round(b), 0, 255);
       data[idx + 3] = 255;
+
+      hData[idx] = hByte;
+      hData[idx + 1] = hByte;
+      hData[idx + 2] = hByte;
+      hData[idx + 3] = 255;
+
+      rData[idx] = roughByte;
+      rData[idx + 1] = roughByte;
+      rData[idx + 2] = roughByte;
+      rData[idx + 3] = 255;
     }
   }
   ctx.putImageData(img, 0, 0);
+  heightCtx.putImageData(heightImg, 0, 0);
+  roughCtx.putImageData(roughImg, 0, 0);
 
   const rng = createRng(63911);
-
-  // Step 2: wrapped fallen autumn/forest leaves in warm brown, ochre, and faded olive.
-  const leafPalette = [
-    '#6e4726',
-    '#85582b',
-    '#9a6b31',
-    '#57391f',
-    '#7c662e',
-    '#5f6b32',
-    '#a37538',
-  ];
+  const leafPalette = ['#6e4726', '#85582b', '#9a6b31', '#57391f', '#7c662e', '#5f6b32', '#a37538'];
 
   for (let i = 0; i < 135; i++) {
     const x = rng() * size;
@@ -750,14 +933,10 @@ function createGroundDetailTexture(): THREE.CanvasTexture {
       ctx.save();
       ctx.translate(px, py);
       ctx.rotate(angle);
-
-      // Soft ambient contact shadow under fallen leaf.
       ctx.fillStyle = 'rgba(20, 14, 9, 0.32)';
       ctx.beginPath();
       ctx.ellipse(1.2, 1.2, len * 0.52, wid * 0.52, 0, 0, Math.PI * 2);
       ctx.fill();
-
-      // Teardrop fallen leaf body.
       ctx.fillStyle = fill;
       ctx.beginPath();
       ctx.moveTo(-len * 0.5, 0);
@@ -765,19 +944,10 @@ function createGroundDetailTexture(): THREE.CanvasTexture {
       ctx.quadraticCurveTo(0, wid * 0.72, -len * 0.5, 0);
       ctx.closePath();
       ctx.fill();
-
-      ctx.strokeStyle = 'rgba(245, 220, 175, 0.16)';
-      ctx.lineWidth = 0.7;
-      ctx.beginPath();
-      ctx.moveTo(-len * 0.42, 0);
-      ctx.lineTo(len * 0.38, 0);
-      ctx.stroke();
-
       ctx.restore();
     });
   }
 
-  // Step 3: wrapped tiny broken woodland twig bits & bark chips.
   for (let i = 0; i < 72; i++) {
     const x = rng() * size;
     const y = rng() * size;
@@ -806,7 +976,6 @@ function createGroundDetailTexture(): THREE.CanvasTexture {
     });
   }
 
-  // Step 4: crisp damp mossy speckles.
   for (let i = 0; i < 160; i++) {
     const x = rng() * size;
     const y = rng() * size;
@@ -824,28 +993,104 @@ function createGroundDetailTexture(): THREE.CanvasTexture {
     });
   }
 
-  return configureTexture(canvas, THREE.RepeatWrapping);
+  return {
+    map: configureTexture(canvas, THREE.RepeatWrapping, THREE.SRGBColorSpace),
+    normalMap: heightCanvasToNormalTexture(heightCanvas, 2.8, THREE.RepeatWrapping),
+    roughnessMap: configureTexture(roughCanvas, THREE.RepeatWrapping, THREE.NoColorSpace),
+  };
+}
+
+function createRockTextures(): {
+  map: THREE.CanvasTexture;
+  normalMap: THREE.CanvasTexture;
+} {
+  const size = 512;
+  const { canvas, ctx } = makeCanvas(size, size);
+  const { canvas: heightCanvas, ctx: heightCtx } = makeCanvas(size, size);
+  const img = ctx.createImageData(size, size);
+  const heightImg = heightCtx.createImageData(size, size);
+  const data = img.data;
+  const hData = heightImg.data;
+
+  for (let y = 0; y < size; y++) {
+    const v = y / size;
+    for (let x = 0; x < size; x++) {
+      const u = x / size;
+
+      const fracture = periodicFbm(u, v, 5, 5, 3, 503.1);
+      const mineral = periodicFbm(u, v, 18, 18, 3, 611.7);
+      const grit = periodicNoise(u, v, 64, 64, 719.3);
+      const seam = 1 - smoothstep(0.0, 0.08, Math.abs(fracture - 0.5));
+
+      let base = lerp(82, 138, mineral * 0.68 + grit * 0.32);
+      base *= 1 - seam * 0.42;
+      const r = base * 0.96;
+      const g = base * 0.98;
+      const b = base * 1.01;
+
+      const hVal = clamp(mineral * 0.6 + grit * 0.25 + (1 - seam) * 0.25 - 0.1, 0, 1);
+      const hByte = clamp(Math.round(hVal * 255), 0, 255);
+
+      const idx = (y * size + x) * 4;
+      data[idx] = clamp(Math.round(r), 0, 255);
+      data[idx + 1] = clamp(Math.round(g), 0, 255);
+      data[idx + 2] = clamp(Math.round(b), 0, 255);
+      data[idx + 3] = 255;
+
+      hData[idx] = hByte;
+      hData[idx + 1] = hByte;
+      hData[idx + 2] = hByte;
+      hData[idx + 3] = 255;
+    }
+  }
+
+  ctx.putImageData(img, 0, 0);
+  heightCtx.putImageData(heightImg, 0, 0);
+
+  return {
+    map: configureTexture(canvas, THREE.RepeatWrapping, THREE.SRGBColorSpace),
+    normalMap: heightCanvasToNormalTexture(heightCanvas, 3.6, THREE.RepeatWrapping),
+  };
 }
 
 export function createForestTextures(): ForestTextureSet {
-  const barkMap = createBarkTexture();
+  const oakBark = createOakBarkTextures();
+  const birchBark = createBirchBarkTextures();
   const leafClusterMap = createLeafClusterTexture();
   const fernFrondMap = createFernFrondTexture();
   const grassTuftMap = createGrassTuftTexture();
-  const groundDetailMap = createGroundDetailTexture();
+  const ground = createGroundDetailTextures();
+  const rock = createRockTextures();
 
   return {
-    barkMap,
+    barkMap: oakBark.map,
+    oakBarkMap: oakBark.map,
+    oakBarkNormalMap: oakBark.normalMap,
+    oakBarkRoughnessMap: oakBark.roughnessMap,
+    birchBarkMap: birchBark.map,
+    birchBarkNormalMap: birchBark.normalMap,
     leafClusterMap,
     fernFrondMap,
     grassTuftMap,
-    groundDetailMap,
+    groundDetailMap: ground.map,
+    groundNormalMap: ground.normalMap,
+    groundRoughnessMap: ground.roughnessMap,
+    rockMap: rock.map,
+    rockNormalMap: rock.normalMap,
     dispose: () => {
-      barkMap.dispose();
+      oakBark.map.dispose();
+      oakBark.normalMap.dispose();
+      oakBark.roughnessMap.dispose();
+      birchBark.map.dispose();
+      birchBark.normalMap.dispose();
       leafClusterMap.dispose();
       fernFrondMap.dispose();
       grassTuftMap.dispose();
-      groundDetailMap.dispose();
+      ground.map.dispose();
+      ground.normalMap.dispose();
+      ground.roughnessMap.dispose();
+      rock.map.dispose();
+      rock.normalMap.dispose();
     },
   };
 }

@@ -7,6 +7,22 @@ Sürüm numaralandırma kuralı: **`T <Büyük>.<Küçük>`**
 
 ---
 
+## [T 7.0] — 2026-11-26
+**Canlı Dünya — Unreal Engine 5 Seviyesinde PBR Malzemeler, Gerçek Gölge Haritası & PMREM IBL**
+
+### Eklenenler
+- **PBR Normal & Pürüzlülük Doku Seti** (`src/services/forestTextures.ts`): Sobel türevli teğet uzayı normal haritaları (`oakBarkNormalMap`, `birchBarkNormalMap`, `groundNormalMap`, `rockNormalMap`), pürüzlülük haritaları (`oakBarkRoughnessMap`, `groundRoughnessMap`) ve gümüş huş kabuğu (`birchBarkMap`) eklendi.
+- **PMREM IBL & `2048×2048` `PCFSoftShadowMap` Gölge Haritası** (`src/services/forestSceneBuilder.ts`): WASD yürüyüşünde titremeyi önleyen tekzel kilitli (`texel-snapped`) güneş gölge kamerası, alfa kesimli yaprak/gövde derinlik materyalleri (`createCanopyDepthMaterial`, `createBarkDepthMaterial`) ve prosedürel PMREM çevre haritası kuruldu.
+- **Patika Ön Plan Kompozisyonu**: Patikanın sağında gümüş huş, solunda yaşlı meşe/kayın gövdeleri, yosunlu kayalar ve `30.000` çimen + `4.800` eğrelti rozeti ile yüksek yoğunluklu orman altı örtüsü eklendi.
+
+### Yapılanlar / İyileştirmeler
+- Tüm orman yüzey materyalleri (`forestShaders.ts`) doğrusal renk uzayında çalışan PBR `THREE.MeshStandardMaterial` + `onBeforeCompile` yapısına yükseltildi; yağmurda düşük pürüzlülükte su birikintisi yansımaları ve kar altında pürüzlülük geçişi eklendi.
+
+### Çıkarılanlar
+- Bu sürümde kaldırılan bir özellik yoktur.
+
+---
+
 ## [T 6.2] — 2026-11-26
 **Canlı Dünya — Dinamik Skybox, Çok Katmanlı Bulutlar, Güneş Tutulması & Zemin Bulut Gölgeleri**
 
